@@ -129,8 +129,16 @@ function Invoke-Git {
         [Parameter(Mandatory)][string]$Repository,
         [Parameter(Mandatory)][string[]]$Arguments
     )
-    $output = @(& git -C $Repository @Arguments 2>&1)
-    if ($LASTEXITCODE -ne 0) {
+    $preference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = @(& git -C $Repository @Arguments 2>&1)
+        $exit = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $preference
+    }
+    if ($exit -ne 0) {
         throw "Git failed in '$Repository': git $($Arguments -join ' ')`n$($output -join [Environment]::NewLine)"
     }
     return ($output -join [Environment]::NewLine).Trim()
@@ -143,8 +151,15 @@ function Invoke-Logged {
         [Parameter(Mandatory)][string]$Log
     )
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Log) | Out-Null
-    $output = @(& $Executable @Arguments 2>&1)
-    $exit = $LASTEXITCODE
+    $preference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = @(& $Executable @Arguments 2>&1)
+        $exit = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $preference
+    }
     $output | Out-File -LiteralPath $Log -Encoding utf8
     if ($exit -ne 0) {
         $tail = $output | Select-Object -Last 40
