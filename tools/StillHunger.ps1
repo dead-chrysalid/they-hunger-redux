@@ -1098,6 +1098,14 @@ function Invoke-Promote {
     }
     $production = [IO.Path]::GetFullPath([string]$script:Project.paths.production)
     Assert-RuntimeIdle $production
+    $productionStateFile = Join-Path $script:ProjectRoot '.state\production.json'
+    $previousRelease = $null
+    if (Test-Path -LiteralPath $productionStateFile) {
+        $previousState = Get-Content -LiteralPath $productionStateFile -Raw | ConvertFrom-Json
+        if ([string]$previousState.production -eq $production) {
+            $previousRelease = [string]$previousState.release
+        }
+    }
     $manifest = Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json
     $parent = Split-Path -Parent $production
     $stage = Join-Path $parent ".$([IO.Path]::GetFileName($production)).staging-$Release"
@@ -1144,10 +1152,11 @@ function Invoke-Promote {
         release = $Release
         production = $production
         previous = $backup
+        previousRelease = $previousRelease
         promotedUtc = [DateTime]::UtcNow.ToString('o')
         manifest = $manifestFile
     }
-    Write-JsonAtomic (Join-Path $script:ProjectRoot '.state\production.json') $record
+    Write-JsonAtomic $productionStateFile $record
     return $record
 }
 
@@ -1173,11 +1182,22 @@ function Invoke-Rollback {
     }
     $record = [ordered]@{
         production = $production
+        release = [string]$state.previousRelease
         restoredFrom = $previous
         displaced = $failed
+        displacedRelease = [string]$state.release
         rolledBackUtc = [DateTime]::UtcNow.ToString('o')
     }
     Write-JsonAtomic (Join-Path $script:ProjectRoot '.state\rollback.json') $record
+    Write-JsonAtomic $stateFile ([ordered]@{
+        release = [string]$state.previousRelease
+        production = $production
+        previous = $failed
+        previousRelease = [string]$state.release
+        promotedUtc = [DateTime]::UtcNow.ToString('o')
+        manifest = $null
+        restoredByRollback = $true
+    })
     return $record
 }
 
