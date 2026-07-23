@@ -19,7 +19,7 @@ Assert-True ([int]$project.api.clientDll -eq 10) 'Client API authority must rema
 Assert-True ([int]$project.api.renderer -eq 4) 'Renderer API authority must remain 4.'
 Assert-True ([IO.Path]::IsPathRooted([string]$project.paths.production)) 'Production path must be absolute.'
 Assert-True ([string]$project.paths.production -ne 'D:/Games/Xash3d') 'Legacy production path must not remain active.'
-Assert-True ($project.requiredArtifacts.engine -contains 'menu.dll') 'Complete engine runtime must include menu.dll.'
+Assert-True ($project.requiredArtifacts.engine -contains 'rt_bin/menu.dll') 'Complete engine runtime must include rt_bin/menu.dll.'
 Assert-True ($project.requiredArtifacts.sdk.Count -eq 2) 'Both SDK DLLs must be required.'
 Assert-True ($project.releaseExclusions -contains '.workspace/**') 'Workspace-only content must be excluded from releases.'
 Assert-True ($project.userOwned -contains 'StillHunger/SAVE/**') 'Saves must be user-owned.'
