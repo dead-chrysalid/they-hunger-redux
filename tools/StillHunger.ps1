@@ -566,20 +566,20 @@ public static class StillHungerCapture {
 
 function Stop-OwnedProcess {
     param(
-        [Parameter(Mandatory)][int]$Pid,
+        [Parameter(Mandatory)][int]$ProcessId,
         [Parameter(Mandatory)][DateTime]$StartTime,
         [Parameter(Mandatory)][string]$Executable
     )
-    $process = Get-Process -Id $Pid -ErrorAction SilentlyContinue
+    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
     if (-not $process) { return 'already-exited' }
     $actualPath = $process.Path
     if (-not $actualPath.Equals([IO.Path]::GetFullPath($Executable), [StringComparison]::OrdinalIgnoreCase) -or
         [Math]::Abs(($process.StartTime - $StartTime).TotalSeconds) -gt 1) {
-        throw "Refusing to stop PID $Pid because its identity no longer matches the process this command started."
+        throw "Refusing to stop PID $ProcessId because its identity no longer matches the process this command started."
     }
     $null = $process.CloseMainWindow()
     if (-not $process.WaitForExit(5000)) {
-        Stop-Process -Id $Pid
+        Stop-Process -Id $ProcessId
         $process.WaitForExit(5000)
         return 'terminated'
     }
