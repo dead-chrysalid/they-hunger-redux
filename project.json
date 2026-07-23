@@ -80,6 +80,16 @@
     "**/*.pdn",
     "**/*.kra",
     "**/*.aup3",
+    "engine.log",
+    "README-RT-LIVE-EDITOR.txt",
+    "rt_bin/*.bat",
+    "rt_bin/VERSION*",
+    "StillHunger/.xash_id",
+    "StillHunger/cached.wad",
+    "StillHunger/console_history.txt",
+    "StillHunger/custom.hpk",
+    "StillHunger/tempdecal.wad",
+    "StillHunger/voice_ban.dt",
     "rt_bin/ref_gl.pre_lightstyle_fix.dll"
   ],
   "userOwned": [
@@ -90,6 +100,11 @@
     "StillHunger/rt.cfg",
     "StillHunger/userconfig.cfg",
     "StillHunger/video.cfg",
+    "StillHunger/.xash_id",
+    "StillHunger/console_history.txt",
+    "StillHunger/custom.hpk",
+    "StillHunger/tempdecal.wad",
+    "StillHunger/voice_ban.dt",
     "StillHunger/SAVE/**"
   ],
   "initialDefaults": {
