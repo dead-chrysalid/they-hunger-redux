@@ -393,7 +393,8 @@ function Invoke-BuildSet {
         '-DRG_WITH_AMD_FSR2=ON',
         '-DRG_WITH_SHADERS=ON',
         '-DRG_WITH_EDITOR_TESTS=ON',
-        '-DRG_WITH_EXAMPLES=OFF'
+        '-DRG_WITH_EXAMPLES=OFF',
+        '-DCMAKE_POLICY_VERSION_MINIMUM=3.5'
     ) (Join-Path $logs 'rtgl1-configure.log')
     Invoke-Logged 'cmake' @(
         '--build', $rtglBuild,
