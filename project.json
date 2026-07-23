@@ -87,6 +87,7 @@
     "RayTracedGL1.json",
     "rt_bin/OptiScaler.ini",
     "StillHunger/config.cfg",
+    "StillHunger/rt.cfg",
     "StillHunger/userconfig.cfg",
     "StillHunger/video.cfg",
     "StillHunger/SAVE/**"
