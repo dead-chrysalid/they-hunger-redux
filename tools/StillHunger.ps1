@@ -253,7 +253,10 @@ function Test-Excluded {
     param([Parameter(Mandatory)][string]$RelativePath)
     $relative = $RelativePath.Replace('\', '/')
     foreach ($pattern in $script:Project.releaseExclusions) {
-        if ([WildcardPattern]::new([string]$pattern, [WildcardOptions]::IgnoreCase).IsMatch($relative)) {
+        if ([System.Management.Automation.WildcardPattern]::new(
+                [string]$pattern,
+                [System.Management.Automation.WildcardOptions]::IgnoreCase
+            ).IsMatch($relative)) {
             return $true
         }
     }
@@ -264,7 +267,10 @@ function Test-UserOwned {
     param([Parameter(Mandatory)][string]$RelativePath)
     $relative = $RelativePath.Replace('\', '/')
     foreach ($pattern in $script:Project.userOwned) {
-        if ([WildcardPattern]::new([string]$pattern, [WildcardOptions]::IgnoreCase).IsMatch($relative)) {
+        if ([System.Management.Automation.WildcardPattern]::new(
+                [string]$pattern,
+                [System.Management.Automation.WildcardOptions]::IgnoreCase
+            ).IsMatch($relative)) {
             return $true
         }
     }
