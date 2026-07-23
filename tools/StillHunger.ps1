@@ -390,6 +390,7 @@ function Invoke-BuildSet {
         '-S', $Paths.rtgl1,
         '-B', $rtglBuild,
         '-A', 'x64',
+        '-DRG_WITH_SURFACE_WIN32=ON',
         '-DRG_WITH_AMD_FSR2=ON',
         '-DRG_WITH_SHADERS=ON',
         '-DRG_WITH_EDITOR_TESTS=ON',
