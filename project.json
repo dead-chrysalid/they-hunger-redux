@@ -42,13 +42,13 @@
   },
   "requiredArtifacts": {
     "engine": [
-      "xash3d.exe",
-      "xash.dll",
-      "filesystem_stdio.dll",
-      "ref_gl.dll",
-      "menu.dll",
-      "RayTracedGL1.dll",
-      "SDL2.dll"
+      "rt_bin/xash3d.exe",
+      "rt_bin/xash.dll",
+      "rt_bin/filesystem_stdio.dll",
+      "rt_bin/ref_gl.dll",
+      "rt_bin/menu.dll",
+      "rt_bin/RayTracedGL1.dll",
+      "rt_bin/SDL2.dll"
     ],
     "sdk": [
       "StillHunger/cl_dlls/client_amd64.dll",
