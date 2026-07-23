@@ -1120,6 +1120,14 @@ function Invoke-Promote {
                 $source = Join-Path $production ($relative -replace '/', '\')
                 if (Test-Path -LiteralPath $source -PathType Container) {
                     $target = Join-Path $stage ($relative -replace '/', '\')
+                    if (Test-Path -LiteralPath $target) {
+                        $stagePrefix = [IO.Path]::GetFullPath($stage).TrimEnd('\') + '\'
+                        $targetPath = [IO.Path]::GetFullPath($target)
+                        if (-not $targetPath.StartsWith($stagePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                            throw "User-owned staging path escaped the sibling stage: $targetPath"
+                        }
+                        Remove-Item -LiteralPath $targetPath -Recurse -Force
+                    }
                     Copy-Tree $source $target
                 }
             }
