@@ -937,6 +937,57 @@ function Invoke-Finish {
     Enter-ProjectLock
     $feature = Get-Feature $Name
     $paths = Get-BuildPaths $feature
+    $featureRoot = Get-FeatureRoot $Name
+    $existingWorktrees = @(
+        @($paths.engine, $paths.sdk, $paths.rtgl1, $paths.runtime) |
+            Where-Object { Test-Path -LiteralPath $_ }
+    )
+    if ($existingWorktrees.Count -eq 0) {
+        $preprodStateFile = Join-Path $script:ProjectRoot '.state\preprod.json'
+        if (-not (Test-Path -LiteralPath $preprodStateFile)) {
+            throw 'Feature worktrees are gone, but there is no verified preprod state to recover finish.'
+        }
+        $preprodState = Get-Content -LiteralPath $preprodStateFile -Raw | ConvertFrom-Json
+        $releaseId = [string]$preprodState.release
+        $releaseRoot = Join-Path (Resolve-ProjectPath $script:Project.paths.releases) $releaseId
+        $manifestFile = Join-Path $releaseRoot 'release.json'
+        if (-not (Test-Path -LiteralPath $manifestFile)) {
+            throw "Feature worktrees are gone, but release '$releaseId' is incomplete."
+        }
+        foreach ($component in @('engine', 'sdk', 'rtgl1', 'content')) {
+            $repo = Get-RepoPath $component
+            $null = & git -C $repo show-ref --verify --quiet "refs/heads/$($feature.branch)"
+            if ($LASTEXITCODE -eq 0) {
+                throw "Feature worktrees are gone, but branch '$($feature.branch)' still exists in $component."
+            }
+        }
+        $preprod = Resolve-ProjectPath $script:Project.paths.preprod
+        $runtimeState = Test-Runtime $preprod
+        if (-not $runtimeState.valid) {
+            throw "Recovered preprod is incomplete: $($runtimeState.missing -join ', ')"
+        }
+        $manifest = Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json
+        Assert-ReleaseHashes $manifest $preprod
+        $finished = [ordered]@{}
+        foreach ($property in $feature.PSObject.Properties) {
+            $finished[$property.Name] = $property.Value
+        }
+        $finished['status'] = 'finished'
+        $finished['finishedUtc'] = [DateTime]::UtcNow.ToString('o')
+        $finished['release'] = $releaseId
+        $archiveRecord = Assert-ProjectPath (Join-Path $script:ProjectRoot ".state\finished\$Name.json")
+        Write-JsonAtomic $archiveRecord $finished
+        Remove-Item -LiteralPath $featureRoot -Recurse -Force
+        return [ordered]@{
+            recovered = $true
+            release = $releaseId
+            preprod = $preprod
+            archivedFeature = $archiveRecord
+        }
+    }
+    if ($existingWorktrees.Count -ne 4) {
+        throw 'Only some feature worktrees exist; refusing automatic finish recovery.'
+    }
     $stateRoot = Join-Path (Get-FeatureRoot $Name) '.state'
     $buildFile = Join-Path $stateRoot 'build.json'
     $smokeFile = Join-Path $stateRoot 'smoke.json'
@@ -990,12 +1041,15 @@ function Invoke-Finish {
     $contentRepo = Get-RepoPath 'content'
     $null = Invoke-Git $contentRepo @('worktree', 'remove', '--force', [string]$paths.runtime)
     $null = Invoke-Git $contentRepo @('branch', '-d', $branch)
-    $feature.status = 'finished'
-    $feature.finishedUtc = [DateTime]::UtcNow.ToString('o')
-    $feature.release = $releaseResult.release
+    $finished = [ordered]@{}
+    foreach ($property in $feature.PSObject.Properties) {
+        $finished[$property.Name] = $property.Value
+    }
+    $finished['status'] = 'finished'
+    $finished['finishedUtc'] = [DateTime]::UtcNow.ToString('o')
+    $finished['release'] = $releaseResult.release
     $archiveRecord = Assert-ProjectPath (Join-Path $script:ProjectRoot ".state\finished\$Name.json")
-    Write-JsonAtomic $archiveRecord $feature
-    $featureRoot = Get-FeatureRoot $Name
+    Write-JsonAtomic $archiveRecord $finished
     if (Test-Path -LiteralPath $featureRoot) { Remove-Item -LiteralPath $featureRoot -Recurse -Force }
     return [ordered]@{
         merged = @($merged)
