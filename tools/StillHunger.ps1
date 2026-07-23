@@ -518,7 +518,7 @@ function Get-ExactRuntimeProcesses {
 function Assert-RuntimeIdle {
     param([Parameter(Mandatory)][string]$Runtime)
     $executable = Join-Path $Runtime 'rt_bin\xash3d.exe'
-    $processes = Get-ExactRuntimeProcesses $executable
+    $processes = @(Get-ExactRuntimeProcesses $executable)
     if ($processes.Count -gt 0) {
         throw "Runtime is in use by PID(s): $($processes.ProcessId -join ', ')."
     }
