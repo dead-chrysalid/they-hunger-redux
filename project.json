@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "name": "They Still Hunger",
+  "gameToken": "StillHunger",
+  "paths": {
+    "repositories": {
+      "engine": "repos/engine",
+      "sdk": "repos/sdk",
+      "rtgl1": "repos/rtgl1",
+      "mainui": "repos/mainui",
+      "content": "repos/content"
+    },
+    "work": "work",
+    "preprod": "runtime/preprod",
+    "releases": "releases",
+    "releaseManifests": "manifests/releases",
+    "dependencyManifests": "manifests/dependencies",
+    "archives": "archives",
+    "production": "D:/Games/They Still Hunger"
+  },
+  "branches": {
+    "engine": "master",
+    "sdk": "master",
+    "rtgl1": "master",
+    "mainui": "master",
+    "content": "master",
+    "featurePrefix": "codex/"
+  },
+  "api": {
+    "clientDll": 10,
+    "renderer": 4
+  },
+  "dependencies": {
+    "sdl2": {
+      "path": "dependencies/SDL2_VC",
+      "manifest": "manifests/dependencies/SDL2_VC.sha256.csv"
+    },
+    "valve": {
+      "path": "dependencies/valve",
+      "manifest": "manifests/dependencies/valve.sha256.csv"
+    }
+  },
+  "requiredArtifacts": {
+    "engine": [
+      "xash3d.exe",
+      "xash.dll",
+      "filesystem_stdio.dll",
+      "ref_gl.dll",
+      "menu.dll",
+      "RayTracedGL1.dll",
+      "SDL2.dll"
+    ],
+    "sdk": [
+      "StillHunger/cl_dlls/client_amd64.dll",
+      "StillHunger/dlls/einar_amd64.dll"
+    ]
+  },
+  "releaseExclusions": [
+    ".git",
+    ".git/**",
+    ".workspace",
+    ".workspace/**",
+    "rt/editor-backups",
+    "rt/editor-backups/**",
+    "**/*.bak",
+    "**/*.blend1",
+    "**/*.codex-before-*",
+    "**/*.pdb",
+    "**/*.ilk",
+    "**/*.exp",
+    "**/*.lib",
+    "**/*.log",
+    "**/*.dmp",
+    "**/*.tmp",
+    "**/*.cache",
+    "**/fontcache/**",
+    "**/.fontcache/**",
+    "**/screenshots/**",
+    "**/*.blend",
+    "**/*.pdn",
+    "**/*.kra",
+    "**/*.aup3",
+    "rt_bin/ref_gl.pre_lightstyle_fix.dll"
+  ],
+  "userOwned": [
+    "imgui.ini",
+    "RayTracedGL1.json",
+    "rt_bin/OptiScaler.ini",
+    "StillHunger/config.cfg",
+    "StillHunger/userconfig.cfg",
+    "StillHunger/video.cfg",
+    "StillHunger/SAVE/**"
+  ],
+  "initialDefaults": {
+    "root": "repos/content/.workspace/defaults/root",
+    "game": "repos/content/.workspace/defaults/StillHunger"
+  },
+  "distribution": {
+    "optiscaler": "repos/content/.workspace/distribution/optiscaler-0.9.4"
+  },
+  "build": {
+    "configuration": "Release",
+    "platform": "x64",
+    "engineSolution": "xash3d-fwgs.sln",
+    "engineOutput": "x64/Release",
+    "sdkBuild": "build",
+    "rtgl1Build": "Build/x64-Release"
+  },
+  "smoke": {
+    "map": "they23",
+    "seconds": 25,
+    "arguments": [
+      "-game",
+      "StillHunger",
+      "-console",
+      "-log",
+      "-windowed",
+      "+map",
+      "they23"
+    ]
+  }
+}

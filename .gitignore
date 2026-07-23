@@ -1,0 +1,9 @@
+/.state/
+/archives/
+/dependencies/
+/releases/
+/repos/
+/runtime/
+/work/
+*.tmp
+*.log
