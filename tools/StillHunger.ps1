@@ -432,7 +432,8 @@ function Invoke-BuildSet {
     Invoke-Logged 'cmake' @(
         '-S', $Paths.sdk,
         '-B', $sdkBuild,
-        '-A', 'x64'
+        '-A', 'x64',
+        '-D64BIT=ON'
     ) (Join-Path $logs 'sdk-configure.log')
     Invoke-Logged 'cmake' @(
         '--build', $sdkBuild,
