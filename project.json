@@ -116,10 +116,14 @@
     "StillHunger/in_progress_resources/**",
     "StillHunger/sprites/HUD/inprogress",
     "StillHunger/sprites/HUD/inprogress/**",
+    "StillHunger/liblist.gam",
+    "rt/CreateKTX2Cache.txt",
     "rt/mat_dev",
     "rt/mat_dev/**",
     "rt/mat_src",
     "rt/mat_src/**",
+    "rt/scenes/**/mat_junction",
+    "rt/scenes/**/mat_junction/**",
     "rt/scenes/test",
     "rt/scenes/test/**",
     "rt/shaders/*.pre_*",
@@ -143,6 +147,27 @@
   "initialDefaults": {
     "root": "repos/content/.workspace/defaults/root",
     "game": "repos/content/.workspace/defaults/StillHunger"
+  },
+  "development": {
+    "launchArguments": [
+      "-dev"
+    ],
+    "renderer": {
+      "developerMode": true,
+      "developerWindow": true
+    },
+    "gameCommands": [
+      "sv_cheats 1",
+      "bind \"i\" \"impulse 101\"",
+      "bind \"n\" \"noclip\""
+    ]
+  },
+  "textureAuthoring": {
+    "script": "rt/CreateKTX2.py",
+    "source": "rt/mat_dev",
+    "output": "rt/mat",
+    "cache": "rt/CreateKTX2Cache.txt",
+    "compressor": "compressonatorcli.exe"
   },
   "distribution": {
     "optiscaler": "repos/content/.workspace/distribution/optiscaler-0.9.4"
@@ -280,6 +305,9 @@
       "StillHunger/sprites/640hud*.spr",
       "StillHunger/sprites/tfchud*.spr",
       "StillHunger/sprites/tfc_dmsg.spr",
+      "StillHunger/liblist.gam",
+      "rt/CreateKTX2Cache.txt",
+      "rt/scenes/**/mat_junction/**",
       "rt/scenes/test/**",
       "rt/mat_src/**",
       "rt/mat_dev/**"

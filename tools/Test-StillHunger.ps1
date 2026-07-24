@@ -22,10 +22,17 @@ Assert-True ([string]$project.paths.production -ne 'D:/Games/Xash3d') 'Legacy pr
 Assert-True ($project.requiredArtifacts.engine -contains 'rt_bin/menu.dll') 'Complete engine runtime must include rt_bin/menu.dll.'
 Assert-True ($project.requiredArtifacts.sdk.Count -eq 2) 'Both SDK DLLs must be required.'
 Assert-True ($project.releaseExclusions -contains '.workspace/**') 'Workspace-only content must be excluded from releases.'
+Assert-True ($project.releaseExclusions -contains 'rt/mat_dev/**') 'Editable texture sources must be excluded from releases.'
+Assert-True ($project.releaseExclusions -contains 'rt/scenes/**/mat_junction/**') 'Blender texture junctions must be excluded from releases.'
 Assert-True ($project.userOwned -contains 'StillHunger/SAVE/**') 'Saves must be user-owned.'
+Assert-True ($project.development.launchArguments -contains '-dev') 'Feature launches must enable engine developer mode.'
+Assert-True ([bool]$project.development.renderer.developerMode) 'Feature renderer developer mode must be enabled.'
+Assert-True ($project.development.gameCommands -contains 'sv_cheats 1') 'Feature profiles must enable cheats for authoring.'
 
 $unsafe = Select-String -LiteralPath $tool -Pattern 'D:\\Games\\Xash3d|D:/Games/Xash3d'
 Assert-True ($null -eq $unsafe) 'Project tool must not contain the legacy production path.'
+$conversion = Select-String -LiteralPath $tool -Pattern 'Invoke-TextureConversion'
+Assert-True ($null -ne $conversion) 'Release workflow must invoke texture conversion.'
 
 [ordered]@{
     success = $true
@@ -35,6 +42,8 @@ Assert-True ($null -eq $unsafe) 'Project tool must not contain the legacy produc
         'production isolation',
         'complete artifact contract',
         'release exclusions',
+        'feature authoring profile',
+        'release texture conversion',
         'user-owned saves',
         'no legacy deployment path'
     )

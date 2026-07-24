@@ -426,6 +426,131 @@ function Copy-InitialDefaults {
     }
 }
 
+function Enable-FeatureDevelopmentProfile {
+    param([Parameter(Mandatory)][string]$Runtime)
+
+    $rendererFile = Join-Path $Runtime 'RayTracedGL1.json'
+    if (-not (Test-Path -LiteralPath $rendererFile -PathType Leaf)) {
+        throw "Feature renderer settings are missing: $rendererFile"
+    }
+    $renderer = Get-Content -LiteralPath $rendererFile -Raw | ConvertFrom-Json
+    foreach ($setting in @('developerMode', 'developerWindow')) {
+        $value = [bool]$script:Project.development.renderer.$setting
+        if ($renderer.PSObject.Properties[$setting]) {
+            $renderer.$setting = $value
+        }
+        else {
+            $renderer | Add-Member -NotePropertyName $setting -NotePropertyValue $value
+        }
+    }
+    [IO.File]::WriteAllText(
+        $rendererFile,
+        ($renderer | ConvertTo-Json -Depth 20) + [Environment]::NewLine,
+        [Text.UTF8Encoding]::new($false)
+    )
+
+    $userConfig = Join-Path $Runtime "$($script:Project.gameToken)\userconfig.cfg"
+    if (-not (Test-Path -LiteralPath $userConfig -PathType Leaf)) {
+        throw "Feature user configuration is missing: $userConfig"
+    }
+    $begin = '// BEGIN feature development profile'
+    $end = '// END feature development profile'
+    $text = Get-Content -LiteralPath $userConfig -Raw
+    $blockPattern = '(?ms)\r?\n?' + [regex]::Escape($begin) + '.*?' + [regex]::Escape($end) + '\r?\n?'
+    $text = [regex]::Replace($text, $blockPattern, '')
+    $commands = @($script:Project.development.gameCommands | ForEach-Object { [string]$_ })
+    $block = @($begin) + $commands + @($end)
+    $text = $text.TrimEnd() + [Environment]::NewLine + [Environment]::NewLine +
+        ($block -join [Environment]::NewLine) + [Environment]::NewLine
+    [IO.File]::WriteAllText($userConfig, $text, [Text.UTF8Encoding]::new($false))
+
+    return [ordered]@{
+        renderer = $rendererFile
+        userConfig = $userConfig
+        launchArguments = @($script:Project.development.launchArguments)
+        gameCommands = $commands
+    }
+}
+
+function Get-LaunchArguments {
+    param([Parameter(Mandatory)][string]$Kind)
+
+    $arguments = @($script:Project.smoke.arguments | ForEach-Object { [string]$_ })
+    if ($Kind.StartsWith('feature', [StringComparison]::OrdinalIgnoreCase)) {
+        $developmentArguments = @($script:Project.development.launchArguments | ForEach-Object { [string]$_ })
+        $arguments = @($developmentArguments) + $arguments
+    }
+    return $arguments
+}
+
+function Invoke-TextureConversion {
+    param(
+        [Parameter(Mandatory)][string]$Runtime,
+        [Parameter(Mandatory)][string]$StateRoot
+    )
+
+    $scriptFile = Join-Path $Runtime ([string]$script:Project.textureAuthoring.script -replace '/', '\')
+    $sourceRoot = Join-Path $Runtime ([string]$script:Project.textureAuthoring.source -replace '/', '\')
+    $outputRoot = Join-Path $Runtime ([string]$script:Project.textureAuthoring.output -replace '/', '\')
+    $cacheFile = Join-Path $Runtime ([string]$script:Project.textureAuthoring.cache -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $scriptFile -PathType Leaf)) {
+        throw "Texture conversion script is missing: $scriptFile"
+    }
+    if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
+        throw "Texture authoring source is missing: $sourceRoot"
+    }
+
+    $inputs = @(
+        Get-ChildItem -LiteralPath $sourceRoot -Recurse -File |
+            Where-Object { $_.Extension.ToLowerInvariant() -in @('.tga', '.png', '.jpg', '.jpeg') }
+    )
+    if ($inputs.Count -eq 0) {
+        return [ordered]@{ success = $true; inputs = 0; outputs = 0; skipped = $true }
+    }
+
+    $compressorName = [string]$script:Project.textureAuthoring.compressor
+    $compressor = Get-Command $compressorName -CommandType Application -ErrorAction SilentlyContinue
+    if (-not $compressor) {
+        throw "Texture release conversion requires '$compressorName' on PATH. Install GPUOpen Compressonator before finishing this feature."
+    }
+    $python = Get-Command 'py.exe' -CommandType Application -ErrorAction SilentlyContinue
+    if (-not $python) {
+        throw "Texture release conversion requires the Windows Python launcher 'py.exe'."
+    }
+
+    $log = Join-Path $StateRoot 'logs\texture-conversion.log'
+    Invoke-Logged $python.Source @(
+        '-3',
+        $scriptFile,
+        '--input', $sourceRoot,
+        '--output', $outputRoot,
+        '--cache', $cacheFile,
+        '--compressor', $compressor.Source,
+        '--force'
+    ) $log
+
+    $missing = [Collections.Generic.List[string]]::new()
+    foreach ($input in $inputs) {
+        $relative = $input.FullName.Substring($sourceRoot.Length + 1)
+        $expected = Join-Path $outputRoot ([IO.Path]::ChangeExtension($relative, '.ktx2'))
+        if (-not (Test-Path -LiteralPath $expected -PathType Leaf)) {
+            $missing.Add($relative.Replace('\', '/'))
+        }
+    }
+    if ($missing.Count -gt 0) {
+        throw "Texture conversion did not produce KTX2 output for: $($missing -join ', ')"
+    }
+
+    return [ordered]@{
+        success = $true
+        inputs = $inputs.Count
+        outputs = $inputs.Count
+        skipped = $false
+        compressor = $compressor.Source
+        log = $log
+    }
+}
+
 function Install-OptiScaler {
     param([Parameter(Mandatory)][string]$Runtime)
     $distribution = Join-Path $Runtime '.workspace\distribution\optiscaler-0.9.4'
@@ -454,7 +579,8 @@ function Get-BuildPaths {
 function Invoke-BuildSet {
     param(
         [Parameter(Mandatory)]$Paths,
-        [Parameter(Mandatory)][string]$StateRoot
+        [Parameter(Mandatory)][string]$StateRoot,
+        [switch]$Development
     )
     $configuration = [string]$script:Project.build.configuration
     $platform = [string]$script:Project.build.platform
@@ -523,6 +649,12 @@ function Invoke-BuildSet {
     Copy-ValveRuntime $valve (Join-Path $Paths.runtime 'valve')
     Copy-RuntimeBase $Paths.runtime
     Copy-InitialDefaults $Paths.runtime
+    $developmentProfile = if ($Development) {
+        Enable-FeatureDevelopmentProfile $Paths.runtime
+    }
+    else {
+        $null
+    }
     Install-OptiScaler $Paths.runtime
 
     $rtBin = Join-Path $Paths.runtime 'rt_bin'
@@ -557,6 +689,7 @@ function Invoke-BuildSet {
         logs = $logs
         runtime = $runtimeState
         audit = $audit
+        development = $developmentProfile
     }
 }
 
@@ -676,7 +809,7 @@ function Start-Interactive {
     if (-not $state.valid) { throw "Runtime is incomplete: $($state.missing -join ', ')" }
     Assert-RuntimeIdle $Runtime
     $exe = Join-Path $Runtime 'rt_bin\xash3d.exe'
-    $arguments = @($script:Project.smoke.arguments | ForEach-Object { [string]$_ })
+    $arguments = @(Get-LaunchArguments $Kind)
     $process = Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory $Runtime -PassThru
     $record = [ordered]@{
         kind = $Kind
@@ -717,7 +850,7 @@ function Invoke-Smoke {
     }
     Assert-RuntimeIdle $Runtime
     $exe = Join-Path $Runtime 'rt_bin\xash3d.exe'
-    $arguments = @($script:Project.smoke.arguments | ForEach-Object { [string]$_ })
+    $arguments = @(Get-LaunchArguments $Kind)
     if ($MenuOnly) {
         $menuArguments = [Collections.Generic.List[string]]::new()
         for ($argumentIndex = 0; $argumentIndex -lt $arguments.Count; ++$argumentIndex) {
@@ -1022,7 +1155,7 @@ function Invoke-BuildFeature {
     $feature = Get-Feature $Name
     $paths = Get-BuildPaths $feature
     $stateRoot = Join-Path (Get-FeatureRoot $Name) '.state'
-    $result = Invoke-BuildSet $paths $stateRoot
+    $result = Invoke-BuildSet $paths $stateRoot -Development
     $commits = [ordered]@{
         engine = (Invoke-Git $paths.engine @('rev-parse', 'HEAD'))
         sdk = (Invoke-Git $paths.sdk @('rev-parse', 'HEAD'))
@@ -1038,6 +1171,7 @@ function Invoke-BuildFeature {
         logs = $result.logs
         runtime = $result.runtime
         audit = $result.audit
+        development = $result.development
         artifacts = @(
             foreach ($relative in @(
                 'rt_bin\xash3d.exe',
@@ -1190,6 +1324,7 @@ function New-CleanRelease {
             runtime = $paths.runtime
         }
         $build = Invoke-BuildSet $buildPaths $stateRoot
+        $textureConversion = Invoke-TextureConversion $paths.runtime $stateRoot
         New-Item -ItemType Directory -Force -Path (Join-Path $staging 'payload') | Out-Null
         Copy-DeployableTree $paths.runtime (Join-Path $staging 'payload')
         $runtime = Test-Runtime (Join-Path $staging 'payload')
@@ -1209,6 +1344,7 @@ function New-CleanRelease {
             createdUtc = [DateTime]::UtcNow.ToString('o')
             commits = $commits
             api = $build.api
+            textureConversion = $textureConversion
             audit = $audit
             files = Get-HashInventory (Join-Path $staging 'payload')
         }
