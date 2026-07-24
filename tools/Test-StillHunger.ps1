@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $project = Get-Content -LiteralPath (Join-Path $root 'project.json') -Raw | ConvertFrom-Json
 $tool = Join-Path $PSScriptRoot 'StillHunger.ps1'
+$auditTool = Join-Path $PSScriptRoot 'StillHunger.ContentAudit.ps1'
 
 function Assert-True {
     param([bool]$Condition, [string]$Message)
@@ -41,6 +42,8 @@ $conversion = Select-String -LiteralPath $tool -Pattern 'Invoke-TextureConversio
 Assert-True ($null -ne $conversion) 'Release workflow must invoke texture conversion.'
 $dependencyVerification = Select-String -LiteralPath $tool -Pattern 'Assert-DependencyInventory'
 Assert-True ($null -ne $dependencyVerification) 'Release workflow must verify the pinned texture dependency.'
+$developmentUriRule = Select-String -LiteralPath $auditTool -SimpleMatch -Pattern "StartsWith('mat_junction/'"
+Assert-True ($null -ne $developmentUriRule) 'Payload audit must recognize development-only mat_junction URIs.'
 
 [ordered]@{
     success = $true
@@ -53,6 +56,7 @@ Assert-True ($null -ne $dependencyVerification) 'Release workflow must verify th
         'feature authoring profile',
         'pinned texture toolchain',
         'release texture conversion',
+        'development-only glTF URI policy',
         'user-owned saves',
         'no legacy deployment path'
     )

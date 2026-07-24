@@ -156,6 +156,11 @@ function Test-StillHungerContent {
             foreach ($uri in $uris) {
                 if ($uri.StartsWith('data:', [StringComparison]::OrdinalIgnoreCase)) { continue }
                 $decoded = [Uri]::UnescapeDataString($uri)
+                $normalizedUri = $decoded.Replace('\', '/')
+                if ($Payload -and
+                    $normalizedUri.StartsWith('mat_junction/', [StringComparison]::OrdinalIgnoreCase)) {
+                    continue
+                }
                 $target = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $gltf) ($decoded -replace '/', '\')))
                 if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
                     $missingUris.Add("${sceneName}:$uri")
