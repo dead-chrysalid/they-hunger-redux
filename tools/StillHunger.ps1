@@ -292,6 +292,27 @@ function Copy-Tree {
     }
 }
 
+function Move-DirectoryAtomic {
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Destination
+    )
+
+    $sourcePath = [IO.Path]::GetFullPath($Source)
+    $destinationPath = [IO.Path]::GetFullPath($Destination)
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Container)) {
+        throw "Directory move source does not exist: $sourcePath"
+    }
+    if (Test-Path -LiteralPath $destinationPath) {
+        throw "Directory move destination already exists: $destinationPath"
+    }
+    if ([IO.Path]::GetPathRoot($sourcePath) -cne [IO.Path]::GetPathRoot($destinationPath)) {
+        throw "Atomic directory moves must stay on one volume: $sourcePath -> $destinationPath"
+    }
+
+    [IO.Directory]::Move($sourcePath, $destinationPath)
+}
+
 function Copy-ValveRuntime {
     param(
         [Parameter(Mandatory)][string]$Source,
@@ -1053,6 +1074,50 @@ function Get-NextReleaseId {
     return [string](($numbers | Measure-Object -Maximum).Maximum + 1)
 }
 
+function Get-ReusableRelease {
+    $releaseRoot = Resolve-ProjectPath $script:Project.paths.releases
+    $current = [ordered]@{
+        engine = Invoke-Git (Get-RepoPath 'engine') @('rev-parse', [string]$script:Project.branches.engine)
+        sdk = Invoke-Git (Get-RepoPath 'sdk') @('rev-parse', [string]$script:Project.branches.sdk)
+        rtgl1 = Invoke-Git (Get-RepoPath 'rtgl1') @('rev-parse', [string]$script:Project.branches.rtgl1)
+        mainui = Invoke-Git (Get-RepoPath 'mainui') @('rev-parse', [string]$script:Project.branches.mainui)
+        content = Invoke-Git (Get-RepoPath 'content') @('rev-parse', [string]$script:Project.branches.content)
+    }
+
+    $candidates = @(
+        Get-ChildItem -LiteralPath $releaseRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object Name -Match '^\d+$' |
+            Sort-Object { [int]$_.Name } -Descending
+    )
+    foreach ($candidate in $candidates) {
+        $manifestFile = Join-Path $candidate.FullName 'release.json'
+        $payload = Join-Path $candidate.FullName 'payload'
+        if (-not (Test-Path -LiteralPath $manifestFile -PathType Leaf)) { continue }
+        try {
+            $manifest = Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json
+            $matches = $true
+            foreach ($component in $current.Keys) {
+                if ([string]$manifest.commits.$component -cne [string]$current[$component]) {
+                    $matches = $false
+                    break
+                }
+            }
+            if (-not $matches) { continue }
+
+            $null = & git -C $script:ProjectRoot merge-base --is-ancestor ([string]$manifest.commits.orchestration) HEAD
+            if ($LASTEXITCODE -ne 0) { continue }
+
+            Assert-ReleaseHashes $manifest $payload
+            Test-StillHungerContent $payload $script:Project -Payload | Out-Null
+            return [string]$candidate.Name
+        }
+        catch {
+            continue
+        }
+    }
+    return $null
+}
+
 function Stage-Preprod {
     param([Parameter(Mandatory)][string]$ReleaseId)
     $releaseRoot = Join-Path (Resolve-ProjectPath $script:Project.paths.releases) $ReleaseId
@@ -1077,13 +1142,13 @@ function Stage-Preprod {
         throw "Preprod staging hash verification failed for release '$ReleaseId'."
     }
     try {
-        if (Test-Path -LiteralPath $preprod) { Move-Item -LiteralPath $preprod -Destination $backup }
-        Move-Item -LiteralPath $stage -Destination $preprod
+        if (Test-Path -LiteralPath $preprod) { Move-DirectoryAtomic $preprod $backup }
+        Move-DirectoryAtomic $stage $preprod
         if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Recurse -Force }
     }
     catch {
         if (-not (Test-Path -LiteralPath $preprod) -and (Test-Path -LiteralPath $backup)) {
-            Move-Item -LiteralPath $backup -Destination $preprod
+            Move-DirectoryAtomic $backup $preprod
         }
         throw
     }
@@ -1262,8 +1327,22 @@ function Invoke-Finish {
             }
         }
         Assert-ApiCompatible (Get-RepoPath 'engine') (Get-RepoPath 'sdk') | Out-Null
-        $releaseId = Get-NextReleaseId
-        $releaseResult = New-CleanRelease $releaseId
+        $releaseId = Get-ReusableRelease
+        if ($releaseId) {
+            $releaseRoot = Join-Path (Resolve-ProjectPath $script:Project.paths.releases) $releaseId
+            $preprod = Stage-Preprod $releaseId
+            $releaseResult = [ordered]@{
+                release = $releaseId
+                path = $releaseRoot
+                manifest = Join-Path $releaseRoot 'release.json'
+                preprod = $preprod
+                recovered = $true
+            }
+        }
+        else {
+            $releaseId = Get-NextReleaseId
+            $releaseResult = New-CleanRelease $releaseId
+        }
     }
     catch {
         foreach ($component in @(Get-Reversed $merged)) {
@@ -1504,13 +1583,13 @@ function Invoke-Promote {
     try {
         if (Test-Path -LiteralPath $production) {
             $backup = "$production.rollback-$([DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))"
-            Move-Item -LiteralPath $production -Destination $backup
+            Move-DirectoryAtomic $production $backup
         }
-        Move-Item -LiteralPath $stage -Destination $production
+        Move-DirectoryAtomic $stage $production
     }
     catch {
         if (-not (Test-Path -LiteralPath $production) -and $backup -and (Test-Path -LiteralPath $backup)) {
-            Move-Item -LiteralPath $backup -Destination $production
+            Move-DirectoryAtomic $backup $production
         }
         throw
     }
@@ -1539,13 +1618,13 @@ function Invoke-Rollback {
     if (-not (Test-Path -LiteralPath $previous -PathType Container)) { throw "Rollback directory is missing: $previous" }
     Assert-RuntimeIdle $production
     $failed = "$production.failed-$([DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))"
-    if (Test-Path -LiteralPath $production) { Move-Item -LiteralPath $production -Destination $failed }
+    if (Test-Path -LiteralPath $production) { Move-DirectoryAtomic $production $failed }
     try {
-        Move-Item -LiteralPath $previous -Destination $production
+        Move-DirectoryAtomic $previous $production
     }
     catch {
         if (-not (Test-Path -LiteralPath $production) -and (Test-Path -LiteralPath $failed)) {
-            Move-Item -LiteralPath $failed -Destination $production
+            Move-DirectoryAtomic $failed $production
         }
         throw
     }
