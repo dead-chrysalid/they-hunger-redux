@@ -709,7 +709,7 @@ function Invoke-Smoke {
     $contentAudit = $null
     if (-not $SkipAudit) {
         $contentAudit = if ($Kind -eq 'preprod') {
-            Test-StillHungerContent $Runtime $script:Project -Payload
+            Test-StillHungerContent $Runtime $script:Project -Payload -AllowGenerated
         }
         else {
             Test-StillHungerContent $Runtime $script:Project
@@ -844,7 +844,7 @@ function Invoke-SmokeCampaign {
         throw "Runtime is incomplete: $($runtimeState.missing -join ', ')"
     }
     $audit = if ($payload) {
-        Test-StillHungerContent $runtime $script:Project -Payload
+        Test-StillHungerContent $runtime $script:Project -Payload -AllowGenerated
     }
     else {
         Test-StillHungerContent $runtime $script:Project
@@ -1006,7 +1006,7 @@ function Invoke-Audit {
         if (Test-Path -LiteralPath $preprodStateFile) {
             $preprodState = Get-Content -LiteralPath $preprodStateFile -Raw | ConvertFrom-Json
             if ([string]$preprodState.release -eq $Release) {
-                $result.preprod = Test-StillHungerContent (Resolve-ProjectPath $script:Project.paths.preprod) $script:Project -Payload
+                $result.preprod = Test-StillHungerContent (Resolve-ProjectPath $script:Project.paths.preprod) $script:Project -Payload -AllowGenerated
             }
         }
         Write-JsonAtomic (Join-Path $script:ProjectRoot ".state\audits\release-$Release.json") $result

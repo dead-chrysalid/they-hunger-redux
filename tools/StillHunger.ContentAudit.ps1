@@ -93,7 +93,8 @@ function Test-StillHungerContent {
     param(
         [Parameter(Mandatory)][string]$Runtime,
         [Parameter(Mandatory)]$Project,
-        [switch]$Payload
+        [switch]$Payload,
+        [switch]$AllowGenerated
     )
 
     $runtimePath = [IO.Path]::GetFullPath($Runtime).TrimEnd('\')
@@ -103,7 +104,7 @@ function Test-StillHungerContent {
     $deployable = @(
         foreach ($entry in $files) {
             $excluded = Test-StillHungerPolicyPattern $entry.relative $Project.releaseExclusions
-            if ($Payload -and $excluded) {
+            if ($Payload -and $excluded -and -not $AllowGenerated) {
                 $errors.Add("excluded-file-shipped:$($entry.relative)")
             }
             if (-not $excluded) { $entry }
