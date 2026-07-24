@@ -5,8 +5,10 @@ param(
         'new',
         'status',
         'build',
+        'audit',
         'launch-feature',
         'smoke-feature',
+        'smoke-campaign',
         'finish',
         'launch-preprod',
         'smoke-preprod',
@@ -28,6 +30,7 @@ $ProgressPreference = 'SilentlyContinue'
 $script:ProjectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $script:ProjectFile = Join-Path $script:ProjectRoot 'project.json'
 $script:Project = Get-Content -LiteralPath $script:ProjectFile -Raw | ConvertFrom-Json
+. (Join-Path $PSScriptRoot 'StillHunger.ContentAudit.ps1')
 $script:LockStream = $null
 
 function Resolve-ProjectPath {
@@ -289,6 +292,54 @@ function Copy-Tree {
     }
 }
 
+function Copy-ValveRuntime {
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Destination
+    )
+
+    if (Test-Path -LiteralPath $Destination) {
+        Remove-Item -LiteralPath $Destination -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+
+    $sourceRoot = [IO.Path]::GetFullPath($Source).TrimEnd('\')
+    $spriteFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($sprite in $script:Project.releasePolicy.valveSpriteFiles) {
+        $null = $spriteFiles.Add(([string]$sprite).Replace('\', '/'))
+    }
+
+    foreach ($file in Get-ChildItem -LiteralPath $sourceRoot -Recurse -Force -File) {
+        $relative = $file.FullName.Substring($sourceRoot.Length + 1).Replace('\', '/')
+        $include = $spriteFiles.Contains($relative)
+        if (-not $include) {
+            foreach ($pattern in $script:Project.releasePolicy.valveIncludePatterns) {
+                if ([System.Management.Automation.WildcardPattern]::new(
+                        [string]$pattern,
+                        [System.Management.Automation.WildcardOptions]::IgnoreCase
+                    ).IsMatch($relative)) {
+                    $include = $true
+                    break
+                }
+            }
+        }
+        if (-not $include) { continue }
+
+        $target = Join-Path $Destination ($relative -replace '/', '\')
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+        Copy-Item -LiteralPath $file.FullName -Destination $target -Force
+    }
+}
+
+function Copy-RuntimeBase {
+    param([Parameter(Mandatory)][string]$Runtime)
+
+    $runtimeBase = Resolve-ProjectPath $script:Project.paths.runtimeBase
+    if (Test-Path -LiteralPath $runtimeBase -PathType Container) {
+        Copy-Tree $runtimeBase $Runtime
+    }
+}
+
 function Copy-DeployableTree {
     param(
         [Parameter(Mandatory)][string]$Source,
@@ -448,7 +499,8 @@ function Invoke-BuildSet {
     ) (Join-Path $logs 'sdk-build.log')
 
     $valve = Resolve-ProjectPath $script:Project.dependencies.valve.path
-    Copy-Tree $valve (Join-Path $Paths.runtime 'valve')
+    Copy-ValveRuntime $valve (Join-Path $Paths.runtime 'valve')
+    Copy-RuntimeBase $Paths.runtime
     Copy-InitialDefaults $Paths.runtime
     Install-OptiScaler $Paths.runtime
 
@@ -478,10 +530,12 @@ function Invoke-BuildSet {
     if (-not $runtimeState.valid) {
         throw "Assembled runtime is incomplete: $($runtimeState.missing -join ', ')"
     }
+    $audit = Test-StillHungerContent $Paths.runtime $script:Project
     return [ordered]@{
         api = $api
         logs = $logs
         runtime = $runtimeState
+        audit = $audit
     }
 }
 
@@ -489,7 +543,7 @@ function Test-Runtime {
     param([Parameter(Mandatory)][string]$Runtime)
     $required = @()
     foreach ($artifact in $script:Project.requiredArtifacts.engine) {
-        $required += "rt_bin/$artifact"
+        $required += [string]$artifact
     }
     foreach ($artifact in $script:Project.requiredArtifacts.sdk) {
         $required += [string]$artifact
@@ -621,27 +675,67 @@ function Invoke-Smoke {
     param(
         [Parameter(Mandatory)][string]$Runtime,
         [Parameter(Mandatory)][string]$StateRoot,
-        [Parameter(Mandatory)][string]$Kind
+        [Parameter(Mandatory)][string]$Kind,
+        [string]$Map,
+        [int]$Seconds = 0,
+        [string]$RecordName = 'smoke.json',
+        [switch]$MenuOnly,
+        [switch]$SkipAudit,
+        [switch]$NoScreenshot
     )
     $state = Test-Runtime $Runtime
     if (-not $state.valid) { throw "Runtime is incomplete: $($state.missing -join ', ')" }
+    $contentAudit = $null
+    if (-not $SkipAudit) {
+        $contentAudit = if ($Kind -eq 'preprod') {
+            Test-StillHungerContent $Runtime $script:Project -Payload
+        }
+        else {
+            Test-StillHungerContent $Runtime $script:Project
+        }
+    }
     Assert-RuntimeIdle $Runtime
     $exe = Join-Path $Runtime 'rt_bin\xash3d.exe'
     $arguments = @($script:Project.smoke.arguments | ForEach-Object { [string]$_ })
+    if ($MenuOnly) {
+        $menuArguments = [Collections.Generic.List[string]]::new()
+        for ($argumentIndex = 0; $argumentIndex -lt $arguments.Count; ++$argumentIndex) {
+            if ($arguments[$argumentIndex] -ieq '+map') {
+                ++$argumentIndex
+                continue
+            }
+            $menuArguments.Add($arguments[$argumentIndex])
+        }
+        $arguments = @($menuArguments)
+        $Map = 'menu-background'
+    }
+    else {
+        if ([string]::IsNullOrWhiteSpace($Map)) {
+            $Map = [string]$script:Project.smoke.map
+        }
+        for ($argumentIndex = 0; $argumentIndex -lt ($arguments.Count - 1); ++$argumentIndex) {
+            if ($arguments[$argumentIndex] -ieq '+map') {
+                $arguments[$argumentIndex + 1] = $Map
+                break
+            }
+        }
+    }
     $log = Join-Path $Runtime 'engine.log'
     if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log -Force }
     $process = Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory $Runtime -PassThru
     $pidStarted = $process.Id
     $startTime = $process.StartTime
-    $seconds = [int]$script:Project.smoke.seconds
+    if ($Seconds -le 0) {
+        $Seconds = [int]$script:Project.smoke.seconds
+    }
     $shot = $null
     try {
-        for ($i = 0; $i -lt $seconds; $i++) {
+        for ($i = 0; $i -lt $Seconds; $i++) {
             Start-Sleep -Seconds 1
             $process.Refresh()
             if ($process.HasExited) { break }
         }
-        if ($Screenshots -and -not $process.HasExited) {
+        if ($Screenshots -and -not $NoScreenshot -and -not $process.HasExited) {
             $shot = Save-Screenshot $process (Join-Path $StateRoot "screenshots\$Kind-$($startTime.ToString('yyyyMMdd-HHmmss')).png")
         }
         $exitBeforeCleanup = if ($process.HasExited) { $process.ExitCode } else { $null }
@@ -653,10 +747,19 @@ function Invoke-Smoke {
     }
     $logErrors = @()
     if (Test-Path -LiteralPath $log) {
-        $logErrors = @(
-            Select-String -LiteralPath $log -Pattern 'Sys_Crash|Assertion failed|Host_Error|FATAL ERROR' |
-                ForEach-Object { $_.Line }
-        )
+        $errorLines = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($pattern in $script:Project.releasePolicy.logFailurePatterns) {
+            foreach ($match in Select-String -LiteralPath $log -Pattern ([string]$pattern)) {
+                $null = $errorLines.Add($match.Line)
+            }
+        }
+        $logErrors = @($errorLines)
+    }
+    $savedLog = $null
+    if (Test-Path -LiteralPath $log) {
+        $savedLog = Join-Path $StateRoot "logs\$($Map -replace '[^A-Za-z0-9_.-]', '_').log"
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $savedLog) | Out-Null
+        Copy-Item -LiteralPath $log -Destination $savedLog -Force
     }
     $success = ($exitBeforeCleanup -eq $null -or $exitBeforeCleanup -eq 0) -and $logErrors.Count -eq 0
     $record = [ordered]@{
@@ -666,18 +769,108 @@ function Invoke-Smoke {
         executable = $exe
         pid = $pidStarted
         startTime = $startTime.ToString('o')
-        map = [string]$script:Project.smoke.map
+        map = $Map
         arguments = $arguments
-        observedSeconds = $seconds
+        observedSeconds = $Seconds
         exitBeforeCleanup = $exitBeforeCleanup
         cleanup = $cleanup
-        log = if (Test-Path -LiteralPath $log) { $log } else { $null }
+        audit = $contentAudit
+        log = $savedLog
         logErrors = $logErrors
         screenshot = $shot
         finishedUtc = [DateTime]::UtcNow.ToString('o')
     }
-    Write-JsonAtomic (Join-Path $StateRoot 'smoke.json') $record
-    if (-not $success) { throw "Smoke test failed. See '$StateRoot\smoke.json'." }
+    Write-JsonAtomic (Join-Path $StateRoot $RecordName) $record
+    if (-not $success) { throw "Smoke test failed. See '$StateRoot\$RecordName'." }
+    return $record
+}
+
+function Invoke-SmokeCampaign {
+    if (-not [string]::IsNullOrWhiteSpace($Name) -and -not [string]::IsNullOrWhiteSpace($Release)) {
+        throw "Use either -Name or -Release with 'smoke-campaign', not both."
+    }
+
+    $runtime = $null
+    $stateRoot = $null
+    $target = $null
+    $payload = $false
+    if (-not [string]::IsNullOrWhiteSpace($Name)) {
+        $feature = Get-Feature $Name
+        $runtime = [string]$feature.paths.runtime
+        $stateRoot = Join-Path (Get-FeatureRoot $Name) '.state\campaign-smoke'
+        $target = "feature-$Name"
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($Release)) {
+        $preprodStateFile = Join-Path $script:ProjectRoot '.state\preprod.json'
+        if (-not (Test-Path -LiteralPath $preprodStateFile)) {
+            throw 'No release is staged in preprod.'
+        }
+        $preprodState = Get-Content -LiteralPath $preprodStateFile -Raw | ConvertFrom-Json
+        if ([string]$preprodState.release -ne $Release) {
+            throw "Preprod contains release '$($preprodState.release)', not '$Release'."
+        }
+        $runtime = Resolve-ProjectPath $script:Project.paths.preprod
+        $stateRoot = Join-Path $script:ProjectRoot '.state\preprod-campaign-smoke'
+        $target = "preprod-$Release"
+        $payload = $true
+    }
+    else {
+        throw "-Name or -Release is required for 'smoke-campaign'."
+    }
+
+    $runtimeState = Test-Runtime $runtime
+    if (-not $runtimeState.valid) {
+        throw "Runtime is incomplete: $($runtimeState.missing -join ', ')"
+    }
+    $audit = if ($payload) {
+        Test-StillHungerContent $runtime $script:Project -Payload
+    }
+    else {
+        Test-StillHungerContent $runtime $script:Project
+    }
+
+    $seconds = [int]$script:Project.releasePolicy.campaignSmokeSeconds
+    $results = [Collections.Generic.List[object]]::new()
+    $currentMap = 'menu-background'
+    try {
+        $results.Add((Invoke-Smoke $runtime $stateRoot "$target-menu" -Seconds $seconds -RecordName 'menu.json' -MenuOnly -SkipAudit))
+        foreach ($mapName in $script:Project.releasePolicy.campaignMaps) {
+            $currentMap = [string]$mapName
+            if ($currentMap -eq 'menu') { continue }
+            $recordName = "maps\$currentMap.json"
+            if ($currentMap -eq [string]$script:Project.smoke.map) {
+                $results.Add((Invoke-Smoke $runtime $stateRoot "$target-$currentMap" -Map $currentMap -Seconds $seconds -RecordName $recordName -SkipAudit))
+            }
+            else {
+                $results.Add((Invoke-Smoke $runtime $stateRoot "$target-$currentMap" -Map $currentMap -Seconds $seconds -RecordName $recordName -SkipAudit -NoScreenshot))
+            }
+        }
+    }
+    catch {
+        Write-JsonAtomic (Join-Path $stateRoot 'campaign-smoke.json') ([ordered]@{
+            success = $false
+            target = $target
+            runtime = $runtime
+            audit = $audit
+            completed = $results.Count
+            failedMap = $currentMap
+            error = $_.Exception.Message
+            finishedUtc = [DateTime]::UtcNow.ToString('o')
+        })
+        throw
+    }
+
+    $record = [ordered]@{
+        success = $true
+        target = $target
+        runtime = $runtime
+        audit = $audit
+        maps = $results.Count
+        secondsPerMap = $seconds
+        results = @($results)
+        finishedUtc = [DateTime]::UtcNow.ToString('o')
+    }
+    Write-JsonAtomic (Join-Path $stateRoot 'campaign-smoke.json') $record
     return $record
 }
 
@@ -759,6 +952,49 @@ function Invoke-Status {
     }
 }
 
+function Invoke-Audit {
+    if (-not [string]::IsNullOrWhiteSpace($Name) -and -not [string]::IsNullOrWhiteSpace($Release)) {
+        throw "Use either -Name or -Release with 'audit', not both."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Name)) {
+        $feature = Get-Feature $Name
+        $runtime = [string]$feature.paths.runtime
+        $runtimeState = Test-Runtime $runtime
+        if (-not $runtimeState.valid) {
+            throw "Feature runtime is incomplete: $($runtimeState.missing -join ', ')"
+        }
+        $audit = Test-StillHungerContent $runtime $script:Project
+        Write-JsonAtomic (Join-Path (Get-FeatureRoot $Name) '.state\audit.json') $audit
+        return $audit
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Release)) {
+        $releaseRoot = Join-Path (Resolve-ProjectPath $script:Project.paths.releases) $Release
+        $payload = Join-Path $releaseRoot 'payload'
+        if (-not (Test-Path -LiteralPath $payload -PathType Container)) {
+            throw "Release '$Release' does not exist."
+        }
+
+        $result = [ordered]@{
+            release = $Release
+            payload = Test-StillHungerContent $payload $script:Project -Payload
+            preprod = $null
+        }
+        $preprodStateFile = Join-Path $script:ProjectRoot '.state\preprod.json'
+        if (Test-Path -LiteralPath $preprodStateFile) {
+            $preprodState = Get-Content -LiteralPath $preprodStateFile -Raw | ConvertFrom-Json
+            if ([string]$preprodState.release -eq $Release) {
+                $result.preprod = Test-StillHungerContent (Resolve-ProjectPath $script:Project.paths.preprod) $script:Project -Payload
+            }
+        }
+        Write-JsonAtomic (Join-Path $script:ProjectRoot ".state\audits\release-$Release.json") $result
+        return $result
+    }
+
+    throw "-Name or -Release is required for 'audit'."
+}
+
 function Invoke-BuildFeature {
     Require-FeatureName
     Enter-ProjectLock
@@ -780,6 +1016,7 @@ function Invoke-BuildFeature {
         api = $result.api
         logs = $result.logs
         runtime = $result.runtime
+        audit = $result.audit
         artifacts = @(
             foreach ($relative in @(
                 'rt_bin\xash3d.exe',
@@ -892,6 +1129,7 @@ function New-CleanRelease {
         Copy-DeployableTree $paths.runtime (Join-Path $staging 'payload')
         $runtime = Test-Runtime (Join-Path $staging 'payload')
         if (-not $runtime.valid) { throw "Release payload is incomplete: $($runtime.missing -join ', ')" }
+        $audit = Test-StillHungerContent (Join-Path $staging 'payload') $script:Project -Payload
         $commits = [ordered]@{
             orchestration = (Invoke-Git $script:ProjectRoot @('rev-parse', 'HEAD'))
             engine = (Invoke-Git $paths.engine @('rev-parse', 'HEAD'))
@@ -906,6 +1144,7 @@ function New-CleanRelease {
             createdUtc = [DateTime]::UtcNow.ToString('o')
             commits = $commits
             api = $build.api
+            audit = $audit
             files = Get-HashInventory (Join-Path $staging 'payload')
         }
         Write-JsonAtomic (Join-Path $staging 'release.json') $manifest
@@ -1079,6 +1318,122 @@ function Assert-ReleaseHashes {
     if ($errors.Count -gt 0) { throw "Release hash verification failed: $($errors -join ', ')" }
 }
 
+function New-UserProfileArchive {
+    param(
+        [Parameter(Mandatory)][string]$Production,
+        [Parameter(Mandatory)][string]$ReleaseId
+    )
+
+    if (-not (Test-Path -LiteralPath $Production -PathType Container)) { return $null }
+
+    $archivesRoot = Resolve-ProjectPath $script:Project.paths.archives
+    $archiveRoot = Assert-ProjectPath (Join-Path $archivesRoot "profile-before-release-$ReleaseId-$([DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))")
+    New-Item -ItemType Directory -Force -Path $archiveRoot | Out-Null
+
+    foreach ($entry in $script:Project.userOwned) {
+        $pattern = [string]$entry
+        if ($pattern.EndsWith('/**')) {
+            $relative = $pattern.Substring(0, $pattern.Length - 3)
+            $source = Join-Path $Production ($relative -replace '/', '\')
+            if (Test-Path -LiteralPath $source -PathType Container) {
+                Copy-Tree $source (Join-Path $archiveRoot ($relative -replace '/', '\'))
+            }
+        }
+        else {
+            $source = Join-Path $Production ($pattern -replace '/', '\')
+            if (Test-Path -LiteralPath $source -PathType Leaf) {
+                $target = Join-Path $archiveRoot ($pattern -replace '/', '\')
+                New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+                Copy-Item -LiteralPath $source -Destination $target -Force
+            }
+        }
+    }
+
+    $inventory = @(Get-HashInventory $archiveRoot)
+    Write-JsonAtomic (Join-Path $archiveRoot 'archive.json') ([ordered]@{
+        schemaVersion = 1
+        purpose = 'Pre-promotion user profile snapshot'
+        release = $ReleaseId
+        source = $Production
+        createdUtc = [DateTime]::UtcNow.ToString('o')
+        files = $inventory
+    })
+    return [ordered]@{
+        path = $archiveRoot
+        files = $inventory.Count
+    }
+}
+
+function Set-CleanConfigFile {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [switch]$EnsureCheatsOff
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+
+    $output = [Collections.Generic.List[string]]::new()
+    $hasCheatSetting = $false
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ($line -match '^\s*sv_cheats\s+') {
+            $output.Add('sv_cheats 0')
+            $hasCheatSetting = $true
+            continue
+        }
+        if ($line -match '^\s*cl_trace_messages\s+') { continue }
+        if ($line -match '^\s*bind\s+"?[^"\s]+"?\s+"?(impulse\s+101|noclip|th_give_startitems)"?\s*$') { continue }
+        $output.Add($line)
+    }
+    if ($EnsureCheatsOff -and -not $hasCheatSetting) {
+        $output.Insert(0, 'sv_cheats 0')
+    }
+    [IO.File]::WriteAllLines($Path, @($output), [Text.UTF8Encoding]::new($false))
+    return $true
+}
+
+function Invoke-SurgicalProfileCleanup {
+    param([Parameter(Mandatory)][string]$Runtime)
+
+    $changed = [Collections.Generic.List[string]]::new()
+    $rendererConfig = Join-Path $Runtime 'RayTracedGL1.json'
+    if (Test-Path -LiteralPath $rendererConfig -PathType Leaf) {
+        try {
+            $renderer = Get-Content -LiteralPath $rendererConfig -Raw | ConvertFrom-Json
+            if ($renderer.PSObject.Properties['developerMode']) {
+                $renderer.developerMode = $false
+            }
+            else {
+                $renderer | Add-Member -NotePropertyName developerMode -NotePropertyValue $false
+            }
+            Write-JsonAtomic $rendererConfig $renderer
+            $changed.Add('RayTracedGL1.json')
+        }
+        catch {
+            throw "Could not sanitize renderer profile '$rendererConfig': $($_.Exception.Message)"
+        }
+    }
+
+    $gameRoot = Join-Path $Runtime $script:Project.gameToken
+    $userConfig = Join-Path $gameRoot 'userconfig.cfg'
+    if (Set-CleanConfigFile $userConfig -EnsureCheatsOff) {
+        $changed.Add("$($script:Project.gameToken)/userconfig.cfg")
+    }
+    $config = Join-Path $gameRoot 'config.cfg'
+    if (Set-CleanConfigFile $config) {
+        $changed.Add("$($script:Project.gameToken)/config.cfg")
+    }
+
+    $history = Join-Path $gameRoot 'console_history.txt'
+    if (Test-Path -LiteralPath $history -PathType Leaf) {
+        Remove-Item -LiteralPath $history -Force
+        $changed.Add("$($script:Project.gameToken)/console_history.txt")
+    }
+
+    return [ordered]@{
+        changed = @($changed)
+    }
+}
+
 function Invoke-Promote {
     if ([string]::IsNullOrWhiteSpace($Release)) { throw "-Release is required for 'promote'." }
     Enter-ProjectLock
@@ -1112,6 +1467,8 @@ function Invoke-Promote {
     if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
     Copy-Tree $payload $stage
     Assert-ReleaseHashes $manifest $stage
+    $promotionAudit = Test-StillHungerContent $stage $script:Project -Payload
+    $profileArchive = New-UserProfileArchive $production $Release
     if (Test-Path -LiteralPath $production) {
         foreach ($entry in $script:Project.userOwned) {
             $pattern = [string]$entry
@@ -1141,6 +1498,7 @@ function Invoke-Promote {
             }
         }
     }
+    $profileCleanup = Invoke-SurgicalProfileCleanup $stage
     Assert-ReleaseHashes $manifest $stage -IgnoreUserOwned
     $backup = $null
     try {
@@ -1163,6 +1521,9 @@ function Invoke-Promote {
         previousRelease = $previousRelease
         promotedUtc = [DateTime]::UtcNow.ToString('o')
         manifest = $manifestFile
+        audit = $promotionAudit
+        profileArchive = $profileArchive
+        profileCleanup = $profileCleanup
     }
     Write-JsonAtomic $productionStateFile $record
     return $record
@@ -1214,6 +1575,10 @@ try {
         'new' { Invoke-NewFeature }
         'status' { Invoke-Status }
         'build' { Invoke-BuildFeature }
+        'audit' {
+            Enter-ProjectLock
+            Invoke-Audit
+        }
         'launch-feature' {
             Require-FeatureName
             $feature = Get-Feature $Name
@@ -1224,6 +1589,10 @@ try {
             Enter-ProjectLock
             $feature = Get-Feature $Name
             Invoke-Smoke ([string]$feature.paths.runtime) (Join-Path (Get-FeatureRoot $Name) '.state') "feature-$Name"
+        }
+        'smoke-campaign' {
+            Enter-ProjectLock
+            Invoke-SmokeCampaign
         }
         'finish' { Invoke-Finish }
         'launch-preprod' {
