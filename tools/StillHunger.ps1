@@ -899,7 +899,7 @@ function Invoke-Smoke {
     if (-not $state.valid) { throw "Runtime is incomplete: $($state.missing -join ', ')" }
     $contentAudit = $null
     if (-not $SkipAudit) {
-        $contentAudit = if ($Kind -eq 'preprod') {
+        $contentAudit = if ($Kind -in @('preprod', 'production')) {
             Test-StillHungerContent $Runtime $script:Project -Payload -AllowGenerated
         }
         else {

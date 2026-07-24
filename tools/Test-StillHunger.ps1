@@ -44,6 +44,8 @@ $dependencyVerification = Select-String -LiteralPath $tool -Pattern 'Assert-Depe
 Assert-True ($null -ne $dependencyVerification) 'Release workflow must verify the pinned texture dependency.'
 $developmentUriRule = Select-String -LiteralPath $auditTool -SimpleMatch -Pattern "StartsWith('mat_junction/'"
 Assert-True ($null -ne $developmentUriRule) 'Payload audit must recognize development-only mat_junction URIs.'
+$productionPayloadAudit = Select-String -LiteralPath $tool -SimpleMatch -Pattern "'preprod', 'production'"
+Assert-True ($null -ne $productionPayloadAudit) 'Preprod and production smoke tests must use the same payload audit mode.'
 
 [ordered]@{
     success = $true
@@ -57,6 +59,7 @@ Assert-True ($null -ne $developmentUriRule) 'Payload audit must recognize develo
         'pinned texture toolchain',
         'release texture conversion',
         'development-only glTF URI policy',
+        'production payload audit mode',
         'user-owned saves',
         'no legacy deployment path'
     )
