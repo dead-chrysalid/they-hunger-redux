@@ -16,12 +16,14 @@
 
 Run commands from this directory:
 
+`StillHunger.cmd` applies an execution-policy bypass only to the child PowerShell process running the project tool. It does not change the machine or user execution policy.
+
 ```powershell
-.\tools\StillHunger.ps1 new -Name lighting-pass
-.\tools\StillHunger.ps1 status -Name lighting-pass
-.\tools\StillHunger.ps1 build -Name lighting-pass
-.\tools\StillHunger.ps1 launch-feature -Name lighting-pass
-.\tools\StillHunger.ps1 smoke-feature -Name lighting-pass -Screenshots
+.\tools\StillHunger.cmd new -Name lighting-pass
+.\tools\StillHunger.cmd status -Name lighting-pass
+.\tools\StillHunger.cmd build -Name lighting-pass
+.\tools\StillHunger.cmd launch-feature -Name lighting-pass
+.\tools\StillHunger.cmd smoke-feature -Name lighting-pass -Screenshots
 ```
 
 `new` creates matching `codex/<name>` branches and worktrees for engine, SDK, RayTracedGL1, and content. The content worktree is also the feature runtime, so live-editor changes to glTF and JSON are ordinary Git changes in `work\<name>\runtime`.
@@ -29,6 +31,18 @@ Run commands from this directory:
 Commit intentional changes inside the affected worktrees. `status` reports branches, commits, dirty files, interface compatibility, the current build record, and smoke results.
 
 `build` compiles into component build directories and assembles only the feature runtime. It never writes into preprod or production.
+
+## Texture authoring and release conversion
+
+Run this once on a development machine:
+
+```powershell
+.\tools\Setup-TextureTools.cmd
+```
+
+The setup tool downloads the pinned official Compressonator CLI portable archive when needed, verifies its archive and installed-file hashes, and creates an ignored Python virtual environment under `tools\.venv`. No Python packages are installed because `tools\CreateKTX2.py` uses only the standard library.
+
+Author replacement textures in a feature runtime's `rt\mat_dev` tree and test them there in renderer developer mode. `finish` compiles every supported source image to the matching path under `rt\mat` before packaging. Development sources, `mat_junction`, the cache, and conversion tools are excluded from release payloads.
 
 ## Testing and launches
 
@@ -43,7 +57,7 @@ The tools refuse to replace a runtime that is currently in use. An unrelated Xas
 After all affected work is committed and the last build/smoke record matches the branch tips:
 
 ```powershell
-.\tools\StillHunger.ps1 finish -Name lighting-pass
+.\tools\StillHunger.cmd finish -Name lighting-pass
 ```
 
 `finish` refuses dirty or stale work, merges each non-empty feature branch into local `master` with `--no-ff`, removes completed worktrees/branches, builds from clean detached master worktrees, creates an immutable release, and stages that exact release in preprod.
@@ -55,10 +69,10 @@ For an abandoned experiment, preserve any useful commits or patches, then remove
 Test preprod before promotion:
 
 ```powershell
-.\tools\StillHunger.ps1 launch-preprod
-.\tools\StillHunger.ps1 smoke-preprod -Screenshots
-.\tools\StillHunger.ps1 promote -Release 1
-.\tools\StillHunger.ps1 smoke-production -Screenshots
+.\tools\StillHunger.cmd launch-preprod
+.\tools\StillHunger.cmd smoke-preprod -Screenshots
+.\tools\StillHunger.cmd promote -Release 1
+.\tools\StillHunger.cmd smoke-production -Screenshots
 ```
 
 Promotion copies the immutable release to a sibling staging directory, verifies release-owned hashes, carries forward user-owned settings and saves, and swaps directories only while production is not running. The preceding production directory is retained and recorded.
@@ -66,7 +80,7 @@ Promotion copies the immutable release to a sibling staging directory, verifies 
 Use this if production must be restored:
 
 ```powershell
-.\tools\StillHunger.ps1 rollback
+.\tools\StillHunger.cmd rollback
 ```
 
 Do not manually edit a release directory. A manifest mismatch is a failed release, not something to waive.

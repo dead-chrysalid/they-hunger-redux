@@ -4,6 +4,7 @@
 /releases/
 /repos/
 /runtime/
+/tools/.venv/
 /work/
 *.tmp
 *.log
