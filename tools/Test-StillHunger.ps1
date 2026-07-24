@@ -27,6 +27,7 @@ Assert-True ($project.releaseExclusions -contains 'rt/scenes/**/mat_junction/**'
 Assert-True ($project.userOwned -contains 'StillHunger/SAVE/**') 'Saves must be user-owned.'
 Assert-True ($project.development.launchArguments -contains '-dev') 'Feature launches must enable engine developer mode.'
 Assert-True ([bool]$project.development.renderer.developerMode) 'Feature renderer developer mode must be enabled.'
+Assert-True (-not [bool]$project.development.renderer.developerWindow) 'Feature renderer developer window must default to disabled for OptiScaler compatibility.'
 Assert-True ($project.development.gameCommands -contains 'sv_cheats 1') 'Feature profiles must enable cheats for authoring.'
 
 $unsafe = Select-String -LiteralPath $tool -Pattern 'D:\\Games\\Xash3d|D:/Games/Xash3d'

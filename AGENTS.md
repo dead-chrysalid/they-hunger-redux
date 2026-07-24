@@ -1,7 +1,7 @@
 # They Still Hunger unified project contract
 
 - Read `project.json` before acting; it is the only path and interface authority.
-- Start new engine, SDK, RayTracedGL1, or content work with `tools\StillHunger.ps1 new -Name <feature>`. Work only in its matching `work\<feature>` trees.
+- Start new engine, SDK, RayTracedGL1, or content work with `tools\StillHunger.cmd new -Name <feature>`. Work only in its matching `work\<feature>` trees.
 - StillHunger uses Sultim `ref_gl` and RayTracedGL1, never the separate `ref_vk` project.
 - Keep engine and SDK client API 10 compatible. Keep engine and RayTracedGL1 renderer API 4 compatible.
 - Build commands are build-only. Never configure component builds to deploy directly into production.

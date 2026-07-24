@@ -154,7 +154,7 @@
     ],
     "renderer": {
       "developerMode": true,
-      "developerWindow": true
+      "developerWindow": false
     },
     "gameCommands": [
       "sv_cheats 1",
