@@ -29,11 +29,18 @@ Assert-True ($project.development.launchArguments -contains '-dev') 'Feature lau
 Assert-True ([bool]$project.development.renderer.developerMode) 'Feature renderer developer mode must be enabled.'
 Assert-True (-not [bool]$project.development.renderer.developerWindow) 'Feature renderer developer window must default to disabled for OptiScaler compatibility.'
 Assert-True ($project.development.gameCommands -contains 'sv_cheats 1') 'Feature profiles must enable cheats for authoring.'
+Assert-True ([string]$project.textureAuthoring.script -eq 'tools/CreateKTX2.py') 'Texture conversion must use the project-level tool.'
+Assert-True ([string]$project.textureAuthoring.python -eq 'tools/.venv/Scripts/python.exe') 'Texture conversion must use the project-local Python environment.'
+Assert-True ([string]$project.textureAuthoring.dependency -eq 'compressonator') 'Texture conversion must use the pinned Compressonator dependency.'
+Assert-True ([string]$project.dependencies.compressonator.version -eq '4.5.52') 'Compressonator must remain pinned to the reviewed version.'
+Assert-True (Test-Path -LiteralPath (Join-Path $root 'tools\Setup-TextureTools.cmd') -PathType Leaf) 'Texture toolchain setup wrapper must exist.'
 
 $unsafe = Select-String -LiteralPath $tool -Pattern 'D:\\Games\\Xash3d|D:/Games/Xash3d'
 Assert-True ($null -eq $unsafe) 'Project tool must not contain the legacy production path.'
 $conversion = Select-String -LiteralPath $tool -Pattern 'Invoke-TextureConversion'
 Assert-True ($null -ne $conversion) 'Release workflow must invoke texture conversion.'
+$dependencyVerification = Select-String -LiteralPath $tool -Pattern 'Assert-DependencyInventory'
+Assert-True ($null -ne $dependencyVerification) 'Release workflow must verify the pinned texture dependency.'
 
 [ordered]@{
     success = $true
@@ -44,6 +51,7 @@ Assert-True ($null -ne $conversion) 'Release workflow must invoke texture conver
         'complete artifact contract',
         'release exclusions',
         'feature authoring profile',
+        'pinned texture toolchain',
         'release texture conversion',
         'user-owned saves',
         'no legacy deployment path'

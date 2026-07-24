@@ -32,6 +32,18 @@ Commit intentional changes inside the affected worktrees. `status` reports branc
 
 `build` compiles into component build directories and assembles only the feature runtime. It never writes into preprod or production.
 
+## Texture authoring and release conversion
+
+Run this once on a development machine:
+
+```powershell
+.\tools\Setup-TextureTools.cmd
+```
+
+The setup tool downloads the pinned official Compressonator CLI portable archive when needed, verifies its archive and installed-file hashes, and creates an ignored Python virtual environment under `tools\.venv`. No Python packages are installed because `tools\CreateKTX2.py` uses only the standard library.
+
+Author replacement textures in a feature runtime's `rt\mat_dev` tree and test them there in renderer developer mode. `finish` compiles every supported source image to the matching path under `rt\mat` before packaging. Development sources, `mat_junction`, the cache, and conversion tools are excluded from release payloads.
+
 ## Testing and launches
 
 `launch-feature` and `launch-preprod` are interactive and leave the process running. Smoke commands start a bounded process, record its executable, arguments, PID, start time, map, log, exit result, and optional screenshot, then close only that exact process.

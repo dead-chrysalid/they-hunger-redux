@@ -1,0 +1,15 @@
+{
+  "name": "GPUOpen Compressonator CLI",
+  "version": "4.5.52",
+  "source": "https://github.com/GPUOpen-Tools/compressonator/releases/tag/V4.5.52",
+  "archive": "https://github.com/GPUOpen-Tools/compressonator/releases/download/V4.5.52/compressonatorcli-4.5.52-win64.zip",
+  "archiveSha256": "49ca7c85e299fc104878aef82470d731a7c853cfb5facd879e9bc633fb48a444",
+  "executableSha256": "68eb6352585ef48471f3eec55926c333e637c1465091128f078bcb0c7ac6179b",
+  "installedSubset": [
+    "archive-root files",
+    "plugins",
+    "license"
+  ],
+  "license": "dependencies/CompressonatorCLI-4.5.52/license",
+  "recordedUtc": "2026-07-24T20:28:27.1916979Z"
+}

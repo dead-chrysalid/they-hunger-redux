@@ -32,6 +32,19 @@
     "renderer": 4
   },
   "dependencies": {
+    "compressonator": {
+      "version": "4.5.52",
+      "path": "dependencies/CompressonatorCLI-4.5.52",
+      "manifest": "manifests/dependencies/CompressonatorCLI-4.5.52.sha256.csv",
+      "provenance": "manifests/dependencies/CompressonatorCLI-4.5.52.provenance.json",
+      "archiveUrl": "https://github.com/GPUOpen-Tools/compressonator/releases/download/V4.5.52/compressonatorcli-4.5.52-win64.zip",
+      "archiveSha256": "49ca7c85e299fc104878aef82470d731a7c853cfb5facd879e9bc633fb48a444",
+      "archiveRoot": "compressonatorcli-4.5.52-win64",
+      "runtimeFolders": [
+        "plugins",
+        "license"
+      ]
+    },
     "sdl2": {
       "path": "dependencies/SDL2_VC",
       "manifest": "manifests/dependencies/SDL2_VC.sha256.csv"
@@ -163,11 +176,14 @@
     ]
   },
   "textureAuthoring": {
-    "script": "rt/CreateKTX2.py",
+    "script": "tools/CreateKTX2.py",
+    "python": "tools/.venv/Scripts/python.exe",
+    "pythonVersion": "3.11",
+    "setup": "tools/Setup-TextureTools.cmd",
+    "dependency": "compressonator",
     "source": "rt/mat_dev",
     "output": "rt/mat",
-    "cache": "rt/CreateKTX2Cache.txt",
-    "compressor": "compressonatorcli.exe"
+    "cache": "rt/CreateKTX2Cache.txt"
   },
   "distribution": {
     "optiscaler": "repos/content/.workspace/distribution/optiscaler-0.9.4"

@@ -252,6 +252,55 @@ function Get-HashInventory {
     )
 }
 
+function Assert-DependencyInventory {
+    param([Parameter(Mandatory)][string]$Name)
+
+    $dependency = $script:Project.dependencies.$Name
+    if (-not $dependency) {
+        throw "Unknown dependency: $Name"
+    }
+    $root = Resolve-ProjectPath ([string]$dependency.path)
+    $manifest = Resolve-ProjectPath ([string]$dependency.manifest)
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+        throw "Dependency '$Name' is missing at '$root'."
+    }
+    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+        throw "Dependency manifest for '$Name' is missing: $manifest"
+    }
+
+    $expected = @(
+        Import-Csv -LiteralPath $manifest |
+            ForEach-Object {
+                [pscustomobject]@{
+                    path = [string]$_.Path
+                    length = [long]$_.Length
+                    sha256 = ([string]$_.SHA256).ToLowerInvariant()
+                }
+            }
+    )
+    $actual = @(Get-HashInventory $root)
+    if ($actual.Count -ne $expected.Count) {
+        throw "Dependency '$Name' inventory count mismatch: expected $($expected.Count), found $($actual.Count)."
+    }
+    for ($index = 0; $index -lt $expected.Count; $index++) {
+        $wanted = $expected[$index]
+        $found = $actual[$index]
+        if ($wanted.path -cne $found.path -or
+            $wanted.length -ne $found.length -or
+            $wanted.sha256 -cne $found.sha256) {
+            throw "Dependency '$Name' inventory mismatch at '$($wanted.path)'."
+        }
+    }
+
+    return [ordered]@{
+        name = $Name
+        root = $root
+        manifest = $manifest
+        version = [string]$dependency.version
+        files = $actual.Count
+    }
+}
+
 function Test-Excluded {
     param([Parameter(Mandatory)][string]$RelativePath)
     $relative = $RelativePath.Replace('\', '/')
@@ -489,7 +538,7 @@ function Invoke-TextureConversion {
         [Parameter(Mandatory)][string]$StateRoot
     )
 
-    $scriptFile = Join-Path $Runtime ([string]$script:Project.textureAuthoring.script -replace '/', '\')
+    $scriptFile = Resolve-ProjectPath ([string]$script:Project.textureAuthoring.script)
     $sourceRoot = Join-Path $Runtime ([string]$script:Project.textureAuthoring.source -replace '/', '\')
     $outputRoot = Join-Path $Runtime ([string]$script:Project.textureAuthoring.output -replace '/', '\')
     $cacheFile = Join-Path $Runtime ([string]$script:Project.textureAuthoring.cache -replace '/', '\')
@@ -508,24 +557,30 @@ function Invoke-TextureConversion {
         return [ordered]@{ success = $true; inputs = 0; outputs = 0; skipped = $true }
     }
 
-    $compressorName = [string]$script:Project.textureAuthoring.compressor
-    $compressor = Get-Command $compressorName -CommandType Application -ErrorAction SilentlyContinue
-    if (-not $compressor) {
-        throw "Texture release conversion requires '$compressorName' on PATH. Install GPUOpen Compressonator before finishing this feature."
+    $setup = [string]$script:Project.textureAuthoring.setup
+    $python = Resolve-ProjectPath ([string]$script:Project.textureAuthoring.python)
+    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
+        throw "Texture-tools Python is missing at '$python'. Run '$setup' first."
     }
-    $python = Get-Command 'py.exe' -CommandType Application -ErrorAction SilentlyContinue
-    if (-not $python) {
-        throw "Texture release conversion requires the Windows Python launcher 'py.exe'."
+    $dependencyName = [string]$script:Project.textureAuthoring.dependency
+    try {
+        $dependency = Assert-DependencyInventory $dependencyName
+    }
+    catch {
+        throw "$($_.Exception.Message) Run '$setup' to provision the pinned texture toolchain."
+    }
+    $compressor = Join-Path ([string]$dependency.root) 'compressonatorcli.exe'
+    if (-not (Test-Path -LiteralPath $compressor -PathType Leaf)) {
+        throw "Compressonator executable is missing: $compressor"
     }
 
     $log = Join-Path $StateRoot 'logs\texture-conversion.log'
-    Invoke-Logged $python.Source @(
-        '-3',
+    Invoke-Logged $python @(
         $scriptFile,
         '--input', $sourceRoot,
         '--output', $outputRoot,
         '--cache', $cacheFile,
-        '--compressor', $compressor.Source,
+        '--compressor', $compressor,
         '--force'
     ) $log
 
@@ -546,7 +601,10 @@ function Invoke-TextureConversion {
         inputs = $inputs.Count
         outputs = $inputs.Count
         skipped = $false
-        compressor = $compressor.Source
+        script = $scriptFile
+        python = $python
+        dependency = $dependency
+        compressor = $compressor
         log = $log
     }
 }
