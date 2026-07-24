@@ -1,0 +1,4 @@
+// Minimal base-game bootstrap for the StillHunger fallback filesystem.
+// Player configuration and language selection are owned by the engine/mod.
+
+stuffcmds
