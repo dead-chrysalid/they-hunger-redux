@@ -2,6 +2,7 @@
 
 - Read `project.json` before acting; it is the only path and interface authority.
 - Start new engine, SDK, RayTracedGL1, or content work with `tools\StillHunger.cmd new -Name <feature>`. Work only in its matching `work\<feature>` trees.
+- Use `tools\StillHunger.cmd sync -Name <feature>` after another feature reaches `master`. It merges each component master into the clean feature worktree and invalidates stale build/smoke evidence. `finish` refuses a feature that remains behind master.
 - StillHunger uses Sultim `ref_gl` and RayTracedGL1, never the separate `ref_vk` project.
 - Keep engine and SDK client API 10 compatible. Keep engine and RayTracedGL1 renderer API 4 compatible.
 - Build commands are build-only. Never configure component builds to deploy directly into production.

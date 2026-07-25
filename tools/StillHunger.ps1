@@ -4,6 +4,7 @@ param(
     [ValidateSet(
         'new',
         'status',
+        'sync',
         'build',
         'audit',
         'launch-feature',
@@ -195,6 +196,61 @@ function Get-GitInfo {
         dirty = -not [string]::IsNullOrWhiteSpace($status)
         changes = if ($status) { @($status -split "`r?`n") } else { @() }
     }
+}
+
+function Get-BranchDivergence {
+    param(
+        [Parameter(Mandatory)][string]$Repository,
+        [Parameter(Mandatory)][string]$BaseBranch
+    )
+    $head = Invoke-Git $Repository @('rev-parse', 'HEAD')
+    $base = Invoke-Git $Repository @('rev-parse', $BaseBranch)
+    $ahead = [int](Invoke-Git $Repository @('rev-list', '--count', "$BaseBranch..HEAD"))
+    $behind = [int](Invoke-Git $Repository @('rev-list', '--count', "HEAD..$BaseBranch"))
+    return [ordered]@{
+        baseBranch = $BaseBranch
+        baseCommit = $base
+        headCommit = $head
+        ahead = $ahead
+        behind = $behind
+        current = ($behind -eq 0)
+        diverged = ($ahead -gt 0 -and $behind -gt 0)
+    }
+}
+
+function Get-FeatureGitInfo {
+    param(
+        [Parameter(Mandatory)][string]$Repository,
+        [Parameter(Mandatory)][string]$Component
+    )
+    $info = Get-GitInfo $Repository
+    $divergence = Get-BranchDivergence $Repository ([string]$script:Project.branches.$Component)
+    $info['integration'] = $divergence
+    return $info
+}
+
+function Get-FeatureComponentPaths {
+    param([Parameter(Mandatory)]$Feature)
+    $paths = Get-BuildPaths $Feature
+    return [ordered]@{
+        engine = $paths.engine
+        sdk = $paths.sdk
+        rtgl1 = $paths.rtgl1
+        content = $paths.runtime
+    }
+}
+
+function Remove-FeatureVerification {
+    param([Parameter(Mandatory)][string]$StateRoot)
+    $removed = [Collections.Generic.List[string]]::new()
+    foreach ($name in @('build.json', 'smoke.json', 'campaign-smoke.json', 'audit.json')) {
+        $path = Join-Path $StateRoot $name
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            Remove-Item -LiteralPath $path -Force
+            $removed.Add($name)
+        }
+    }
+    return @($removed)
 }
 
 function Get-ApiState {
@@ -1145,22 +1201,156 @@ function Invoke-Status {
     $feature = Get-Feature $Name
     $paths = Get-BuildPaths $feature
     $repositories = [ordered]@{
-        engine = Get-GitInfo $paths.engine
-        sdk = Get-GitInfo $paths.sdk
-        rtgl1 = Get-GitInfo $paths.rtgl1
-        content = Get-GitInfo $paths.runtime
+        engine = Get-FeatureGitInfo $paths.engine 'engine'
+        sdk = Get-FeatureGitInfo $paths.sdk 'sdk'
+        rtgl1 = Get-FeatureGitInfo $paths.rtgl1 'rtgl1'
+        content = Get-FeatureGitInfo $paths.runtime 'content'
         mainui = Get-GitInfo (Get-RepoPath 'mainui')
     }
     $stateRoot = Join-Path (Get-FeatureRoot $Name) '.state'
     $buildFile = Join-Path $stateRoot 'build.json'
     $smokeFile = Join-Path $stateRoot 'smoke.json'
+    $build = if (Test-Path -LiteralPath $buildFile) { Get-Content $buildFile -Raw | ConvertFrom-Json } else { $null }
+    $smoke = if (Test-Path -LiteralPath $smokeFile) { Get-Content $smokeFile -Raw | ConvertFrom-Json } else { $null }
+    $behindMaster = @(
+        foreach ($component in @('engine', 'sdk', 'rtgl1', 'content')) {
+            if ([int]$repositories.$component.integration.behind -gt 0) {
+                [ordered]@{
+                    component = $component
+                    commits = [int]$repositories.$component.integration.behind
+                }
+            }
+        }
+    )
+    $buildCurrent = $false
+    if ($build -and $build.success) {
+        $buildCurrent = (
+            [string]$build.commits.engine -eq [string]$repositories.engine.commit -and
+            [string]$build.commits.sdk -eq [string]$repositories.sdk.commit -and
+            [string]$build.commits.rtgl1 -eq [string]$repositories.rtgl1.commit -and
+            [string]$build.commits.content -eq [string]$repositories.content.commit -and
+            [string]$build.commits.mainui -eq [string]$repositories.mainui.commit
+        )
+    }
+    $smokeCurrent = $false
+    if ($buildCurrent -and $smoke -and $smoke.success) {
+        try {
+            $smokeCurrent = (
+                [DateTime]::Parse([string]$smoke.finishedUtc).ToUniversalTime() -ge
+                [DateTime]::Parse([string]$build.builtUtc).ToUniversalTime()
+            )
+        }
+        catch {
+            $smokeCurrent = $false
+        }
+    }
+    $featureClean = -not @(
+        @('engine', 'sdk', 'rtgl1', 'content') |
+            Where-Object { [bool]$repositories.$_.dirty }
+    )
+    $mainuiClean = -not [bool]$repositories.mainui.dirty
     return [ordered]@{
         feature = $feature
         repositories = $repositories
+        integration = [ordered]@{
+            needsSync = ($behindMaster.Count -gt 0)
+            behindMaster = $behindMaster
+            featureClean = $featureClean
+            mainuiClean = $mainuiClean
+            buildCurrent = $buildCurrent
+            smokeCurrent = $smokeCurrent
+            readyToFinish = (
+                $behindMaster.Count -eq 0 -and
+                $featureClean -and
+                $mainuiClean -and
+                $buildCurrent -and
+                $smokeCurrent
+            )
+        }
         api = Get-ApiState $paths.engine $paths.sdk
         runtime = Test-Runtime $paths.runtime
-        build = if (Test-Path -LiteralPath $buildFile) { Get-Content $buildFile -Raw | ConvertFrom-Json } else { $null }
-        smoke = if (Test-Path -LiteralPath $smokeFile) { Get-Content $smokeFile -Raw | ConvertFrom-Json } else { $null }
+        build = $build
+        smoke = $smoke
+    }
+}
+
+function Invoke-SyncFeature {
+    Require-FeatureName
+    Enter-ProjectLock
+    $feature = Get-Feature $Name
+    $featureBranch = [string]$feature.branch
+    $componentPaths = Get-FeatureComponentPaths $feature
+    $before = [ordered]@{}
+
+    foreach ($component in @('engine', 'sdk', 'rtgl1', 'content')) {
+        $path = [string]$componentPaths.$component
+        if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+            throw "Feature $component worktree is missing: $path"
+        }
+        $info = Get-GitInfo $path
+        if ([string]$info.branch -ne $featureBranch) {
+            throw "Feature $component worktree is on '$($info.branch)', expected '$featureBranch'."
+        }
+        if ($info.dirty) {
+            throw "Feature $component worktree is dirty: $path"
+        }
+        $canonical = Get-RepoPath $component
+        if (-not (Test-GitClean $canonical)) {
+            throw "Canonical $component repository is dirty."
+        }
+        $before[$component] = Get-BranchDivergence $path ([string]$script:Project.branches.$component)
+    }
+
+    $stateRoot = Join-Path (Get-FeatureRoot $Name) '.state'
+    $buildFile = Join-Path $stateRoot 'build.json'
+    $mainui = Get-RepoPath 'mainui'
+    if (-not (Test-GitClean $mainui)) {
+        throw 'Canonical mainui repository is dirty.'
+    }
+    $mainuiChangedSinceBuild = $false
+    if (Test-Path -LiteralPath $buildFile -PathType Leaf) {
+        $build = Get-Content -LiteralPath $buildFile -Raw | ConvertFrom-Json
+        $mainuiCommit = Invoke-Git $mainui @('rev-parse', 'HEAD')
+        $mainuiChangedSinceBuild = ([string]$build.commits.mainui -ne $mainuiCommit)
+    }
+    $needsSync = @(
+        @('engine', 'sdk', 'rtgl1', 'content') |
+            Where-Object { [int]$before.$_.behind -gt 0 }
+    )
+    $verificationInvalidated = @()
+    if ($needsSync.Count -gt 0 -or $mainuiChangedSinceBuild) {
+        $verificationInvalidated = @(Remove-FeatureVerification $stateRoot)
+    }
+
+    $changed = [Collections.Generic.List[string]]::new()
+    foreach ($component in @('engine', 'sdk', 'rtgl1', 'content')) {
+        if ([int]$before[$component].behind -eq 0) { continue }
+        $path = [string]$componentPaths.$component
+        $master = [string]$script:Project.branches.$component
+        try {
+            $null = Invoke-Git $path @('merge', '--no-edit', $master)
+            $changed.Add($component)
+        }
+        catch {
+            throw "Sync failed in '$component'. Resolve or abort the merge in '$path', then rerun sync. $($_.Exception.Message)"
+        }
+    }
+
+    $after = [ordered]@{}
+    foreach ($component in @('engine', 'sdk', 'rtgl1', 'content')) {
+        $after[$component] = Get-BranchDivergence (
+            [string]$componentPaths.$component
+        ) ([string]$script:Project.branches.$component)
+    }
+    return [ordered]@{
+        feature = $Name
+        branch = $featureBranch
+        changed = @($changed)
+        alreadyCurrent = ($changed.Count -eq 0 -and -not $mainuiChangedSinceBuild)
+        mainuiChangedSinceBuild = $mainuiChangedSinceBuild
+        verificationInvalidated = $verificationInvalidated
+        before = $before
+        after = $after
     }
 }
 
@@ -1213,6 +1403,10 @@ function Invoke-BuildFeature {
     $feature = Get-Feature $Name
     $paths = Get-BuildPaths $feature
     $stateRoot = Join-Path (Get-FeatureRoot $Name) '.state'
+    if (-not (Test-GitClean (Get-RepoPath 'mainui'))) {
+        throw 'Canonical mainui repository is dirty.'
+    }
+    $null = Remove-FeatureVerification $stateRoot
     $result = Invoke-BuildSet $paths $stateRoot -Development
     $commits = [ordered]@{
         engine = (Invoke-Git $paths.engine @('rev-parse', 'HEAD'))
@@ -1496,6 +1690,18 @@ function Invoke-Finish {
     foreach ($path in @($paths.engine, $paths.sdk, $paths.rtgl1, $paths.runtime)) {
         if (-not (Test-GitClean $path)) { throw "Feature worktree is dirty: $path" }
     }
+    if (-not (Test-GitClean (Get-RepoPath 'mainui'))) {
+        throw 'Canonical mainui repository is dirty.'
+    }
+    $componentPaths = Get-FeatureComponentPaths $feature
+    foreach ($component in @('engine', 'sdk', 'rtgl1', 'content')) {
+        $divergence = Get-BranchDivergence (
+            [string]$componentPaths.$component
+        ) ([string]$script:Project.branches.$component)
+        if ([int]$divergence.behind -gt 0) {
+            throw "$component feature is behind master by $($divergence.behind) commit(s). Run 'tools\StillHunger.cmd sync -Name $Name', rebuild, and smoke-test again."
+        }
+    }
     $build = Get-Content -LiteralPath $buildFile -Raw | ConvertFrom-Json
     foreach ($component in @('engine', 'sdk', 'rtgl1')) {
         $actual = Invoke-Git $paths.$component @('rev-parse', 'HEAD')
@@ -1503,6 +1709,20 @@ function Invoke-Finish {
     }
     $contentActual = Invoke-Git $paths.runtime @('rev-parse', 'HEAD')
     if ($contentActual -ne $build.commits.content) { throw 'Content changed after the last build.' }
+    $mainuiActual = Invoke-Git (Get-RepoPath 'mainui') @('rev-parse', 'HEAD')
+    if ($mainuiActual -ne $build.commits.mainui) { throw 'mainui changed after the last build.' }
+    try {
+        $smokeAfterBuild = (
+            [DateTime]::Parse([string]$smoke.finishedUtc).ToUniversalTime() -ge
+            [DateTime]::Parse([string]$build.builtUtc).ToUniversalTime()
+        )
+    }
+    catch {
+        $smokeAfterBuild = $false
+    }
+    if (-not $smokeAfterBuild) {
+        throw 'The feature smoke test is older than the current build. Run smoke-feature again.'
+    }
 
     $branch = [string]$feature.branch
     $preMerge = [ordered]@{}
@@ -1847,6 +2067,7 @@ try {
     $result = switch ($Command) {
         'new' { Invoke-NewFeature }
         'status' { Invoke-Status }
+        'sync' { Invoke-SyncFeature }
         'build' { Invoke-BuildFeature }
         'audit' {
             Enter-ProjectLock
