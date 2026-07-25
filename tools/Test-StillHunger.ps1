@@ -40,6 +40,14 @@ $unsafe = Select-String -LiteralPath $tool -Pattern 'D:\\Games\\Xash3d|D:/Games/
 Assert-True ($null -eq $unsafe) 'Project tool must not contain the legacy production path.'
 $conversion = Select-String -LiteralPath $tool -Pattern 'Invoke-TextureConversion'
 Assert-True ($null -ne $conversion) 'Release workflow must invoke texture conversion.'
+$syncCommand = Select-String -LiteralPath $tool -SimpleMatch -Pattern "'sync' { Invoke-SyncFeature }"
+Assert-True ($null -ne $syncCommand) 'Feature workflow must expose the sync command.'
+$divergenceStatus = Select-String -LiteralPath $tool -Pattern 'needsSync|behindMaster|readyToFinish'
+Assert-True ($divergenceStatus.Count -ge 3) 'Feature status must report integration readiness.'
+$behindMasterGate = Select-String -LiteralPath $tool -SimpleMatch -Pattern 'feature is behind master'
+Assert-True ($null -ne $behindMasterGate) 'Finish must reject features behind master.'
+$smokeFreshnessGate = Select-String -LiteralPath $tool -SimpleMatch -Pattern 'smoke test is older than the current build'
+Assert-True ($null -ne $smokeFreshnessGate) 'Finish must reject stale feature smoke evidence.'
 $dependencyVerification = Select-String -LiteralPath $tool -Pattern 'Assert-DependencyInventory'
 Assert-True ($null -ne $dependencyVerification) 'Release workflow must verify the pinned texture dependency.'
 $developmentUriRule = Select-String -LiteralPath $auditTool -SimpleMatch -Pattern "StartsWith('mat_junction/'"
@@ -56,6 +64,9 @@ Assert-True ($null -ne $productionPayloadAudit) 'Preprod and production smoke te
         'complete artifact contract',
         'release exclusions',
         'feature authoring profile',
+        'feature master synchronization',
+        'integration readiness reporting',
+        'finish freshness gates',
         'pinned texture toolchain',
         'release texture conversion',
         'development-only glTF URI policy',

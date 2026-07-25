@@ -21,6 +21,7 @@ Run commands from this directory:
 ```powershell
 .\tools\StillHunger.cmd new -Name lighting-pass
 .\tools\StillHunger.cmd status -Name lighting-pass
+.\tools\StillHunger.cmd sync -Name lighting-pass
 .\tools\StillHunger.cmd build -Name lighting-pass
 .\tools\StillHunger.cmd launch-feature -Name lighting-pass
 .\tools\StillHunger.cmd smoke-feature -Name lighting-pass -Screenshots
@@ -28,7 +29,9 @@ Run commands from this directory:
 
 `new` creates matching `codex/<name>` branches and worktrees for engine, SDK, RayTracedGL1, and content. The content worktree is also the feature runtime, so live-editor changes to glTF and JSON are ordinary Git changes in `work\<name>\runtime`.
 
-Commit intentional changes inside the affected worktrees. `status` reports branches, commits, dirty files, interface compatibility, the current build record, and smoke results.
+Commit intentional changes inside the affected worktrees. `status` reports branches, commits, dirty files, ahead/behind counts against each canonical `master`, interface compatibility, verification freshness, and whether the feature is ready to finish.
+
+`sync` is safe to run whenever another feature has finished first. It requires clean feature and canonical worktrees, merges each newer component `master` into the matching feature branch, and is a no-op for components that are already current. Any changed component—or a newer canonical `mainui`—invalidates the old build and smoke records, so rebuild and retest the combined result. If Git reports a conflict, resolve or abort it in the named feature worktree and rerun `sync`.
 
 `build` compiles into component build directories and assembles only the feature runtime. It never writes into preprod or production.
 
@@ -60,7 +63,7 @@ After all affected work is committed and the last build/smoke record matches the
 .\tools\StillHunger.cmd finish -Name lighting-pass
 ```
 
-`finish` refuses dirty or stale work, merges each non-empty feature branch into local `master` with `--no-ff`, removes completed worktrees/branches, builds from clean detached master worktrees, creates an immutable release, and stages that exact release in preprod.
+`finish` refuses dirty or stale work, including any component still behind `master` or a smoke result older than the current build. It merges each non-empty feature branch into local `master` with `--no-ff`, removes completed worktrees/branches, builds from clean detached master worktrees, creates an immutable release, and stages that exact release in preprod.
 
 For an abandoned experiment, preserve any useful commits or patches, then remove only the matching worktrees and branches with normal Git worktree/branch commands. Do not delete another feature’s tree or an uncommitted content edit.
 
