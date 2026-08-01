@@ -200,10 +200,8 @@ function Test-StillHungerContent {
         }
         else {
             foreach ($weapon in $hud.weapons.PSObject.Properties) {
-                foreach ($requiredSlot in @('icon', 'shadow')) {
-                    if (-not $weapon.Value.PSObject.Properties[$requiredSlot]) {
-                        $errors.Add("hud-weapon-slot:$($weapon.Name)/$requiredSlot")
-                    }
+                if (-not $weapon.Value.PSObject.Properties['icon']) {
+                    $errors.Add("hud-weapon-slot:$($weapon.Name)/icon")
                 }
             }
         }

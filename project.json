@@ -285,8 +285,10 @@
     ],
     "requiredHudEntries": [
       "number_0",
-      "health_device_body",
-      "health_device_background",
+      "hud_v7/healthbar",
+      "hud_v7/health_symbol",
+      "hud_v7/weapon_card_background",
+      "hud_v7/weapon_card_glow",
       "suit_empty",
       "suit_full",
       "train_back",
@@ -296,9 +298,9 @@
       "train_forward3",
       "title_half",
       "title_life",
-      "selection",
       "crosshair_leaf",
-      "crosshair_dot"
+      "crosshair_dot",
+      "hitmarker"
     ],
     "forbiddenRuntimePatterns": [
       "valve/maps/**",
