@@ -26,6 +26,10 @@ Assert-True ($project.releaseExclusions -contains '.workspace/**') 'Workspace-on
 Assert-True ($project.releaseExclusions -contains 'rt/mat_dev/**') 'Editable texture sources must be excluded from releases.'
 Assert-True ($project.releaseExclusions -contains 'rt/scenes/**/mat_junction/**') 'Blender texture junctions must be excluded from releases.'
 Assert-True ($project.userOwned -contains 'StillHunger/SAVE/**') 'Saves must be user-owned.'
+Assert-True ($project.featureProfile -contains 'StillHunger/config.cfg') 'Feature releases must carry the tuned config profile.'
+foreach ($profileFile in $project.featureProfile) {
+    Assert-True ($project.userOwned -contains [string]$profileFile) "Feature profile file must also be user-owned: $profileFile"
+}
 Assert-True ($project.development.launchArguments -contains '-dev') 'Feature launches must enable engine developer mode.'
 Assert-True ([bool]$project.development.renderer.developerMode) 'Feature renderer developer mode must be enabled.'
 Assert-True (-not [bool]$project.development.renderer.developerWindow) 'Feature renderer developer window must default to disabled for OptiScaler compatibility.'
@@ -54,6 +58,8 @@ $developmentUriRule = Select-String -LiteralPath $auditTool -SimpleMatch -Patter
 Assert-True ($null -ne $developmentUriRule) 'Payload audit must recognize development-only mat_junction URIs.'
 $productionPayloadAudit = Select-String -LiteralPath $tool -SimpleMatch -Pattern "'preprod', 'production'"
 Assert-True ($null -ne $productionPayloadAudit) 'Preprod and production smoke tests must use the same payload audit mode.'
+$featureProfileCapture = Select-String -LiteralPath $tool -Pattern 'Copy-ProductionProfileDefaults|Copy-FeatureProfileToRelease|Test-FeatureProfile'
+Assert-True ($featureProfileCapture.Count -ge 3) 'Feature profiles must inherit, enter the release payload, and take precedence during promotion.'
 
 [ordered]@{
     success = $true
@@ -71,6 +77,7 @@ Assert-True ($null -ne $productionPayloadAudit) 'Preprod and production smoke te
         'release texture conversion',
         'development-only glTF URI policy',
         'production payload audit mode',
+        'feature profile release persistence',
         'user-owned saves',
         'no legacy deployment path'
     )

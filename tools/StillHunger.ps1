@@ -385,6 +385,20 @@ function Test-UserOwned {
     return $false
 }
 
+function Test-FeatureProfile {
+    param([Parameter(Mandatory)][string]$RelativePath)
+    $relative = $RelativePath.Replace('\', '/')
+    foreach ($pattern in $script:Project.featureProfile) {
+        if ([System.Management.Automation.WildcardPattern]::new(
+                [string]$pattern,
+                [System.Management.Automation.WildcardOptions]::IgnoreCase
+            ).IsMatch($relative)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Copy-Tree {
     param(
         [Parameter(Mandatory)][string]$Source,
@@ -464,6 +478,53 @@ function Copy-RuntimeBase {
     if (Test-Path -LiteralPath $runtimeBase -PathType Container) {
         Copy-Tree $runtimeBase $Runtime
     }
+}
+
+function Copy-ProductionProfileDefaults {
+    param([Parameter(Mandatory)][string]$Runtime)
+
+    $production = [IO.Path]::GetFullPath([string]$script:Project.paths.production)
+    $copied = [Collections.Generic.List[string]]::new()
+    if (-not (Test-Path -LiteralPath $production -PathType Container)) {
+        return @($copied)
+    }
+
+    foreach ($entry in $script:Project.featureProfile) {
+        $relative = ([string]$entry).Replace('/', '\')
+        $source = Join-Path $production $relative
+        $target = Join-Path $Runtime $relative
+        if ((Test-Path -LiteralPath $source -PathType Leaf) -and
+            -not (Test-Path -LiteralPath $target)) {
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+            Copy-Item -LiteralPath $source -Destination $target
+            $copied.Add(([string]$entry).Replace('\', '/'))
+        }
+    }
+    return @($copied)
+}
+
+function Copy-FeatureProfileToRelease {
+    param(
+        [Parameter(Mandatory)][string]$FeatureRuntime,
+        [Parameter(Mandatory)][string]$Payload
+    )
+
+    $copied = [Collections.Generic.List[string]]::new()
+    foreach ($entry in $script:Project.featureProfile) {
+        $relative = ([string]$entry).Replace('/', '\')
+        $source = Join-Path $FeatureRuntime $relative
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "Feature profile file is missing: $source"
+        }
+        $target = Join-Path $Payload $relative
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+        Copy-Item -LiteralPath $source -Destination $target -Force
+        $copied.Add(([string]$entry).Replace('\', '/'))
+    }
+
+    $config = Join-Path $Payload "$($script:Project.gameToken)\config.cfg"
+    $null = Set-CleanConfigFile $config
+    return @($copied)
 }
 
 function Copy-DeployableTree {
@@ -762,6 +823,12 @@ function Invoke-BuildSet {
     $valve = Resolve-ProjectPath $script:Project.dependencies.valve.path
     Copy-ValveRuntime $valve (Join-Path $Paths.runtime 'valve')
     Copy-RuntimeBase $Paths.runtime
+    $inheritedProfile = if ($Development) {
+        @(Copy-ProductionProfileDefaults $Paths.runtime)
+    }
+    else {
+        @()
+    }
     Copy-InitialDefaults $Paths.runtime
     $developmentProfile = if ($Development) {
         Enable-FeatureDevelopmentProfile $Paths.runtime
@@ -804,6 +871,7 @@ function Invoke-BuildSet {
         runtime = $runtimeState
         audit = $audit
         development = $developmentProfile
+        inheritedProfile = @($inheritedProfile)
     }
 }
 
@@ -1424,6 +1492,7 @@ function Invoke-BuildFeature {
         runtime = $result.runtime
         audit = $result.audit
         development = $result.development
+        inheritedProfile = @($result.inheritedProfile)
         artifacts = @(
             foreach ($relative in @(
                 'rt_bin\xash3d.exe',
@@ -1547,7 +1616,10 @@ function Stage-Preprod {
 }
 
 function New-CleanRelease {
-    param([Parameter(Mandatory)][string]$ReleaseId)
+    param(
+        [Parameter(Mandatory)][string]$ReleaseId,
+        [Parameter(Mandatory)][string]$FeatureRuntime
+    )
     $workRoot = Resolve-ProjectPath $script:Project.paths.work
     $sourceRoot = Assert-ProjectPath (Join-Path $workRoot ".release-$ReleaseId")
     $releaseRoot = Join-Path (Resolve-ProjectPath $script:Project.paths.releases) $ReleaseId
@@ -1578,7 +1650,9 @@ function New-CleanRelease {
         $build = Invoke-BuildSet $buildPaths $stateRoot
         $textureConversion = Invoke-TextureConversion $paths.runtime $stateRoot
         New-Item -ItemType Directory -Force -Path (Join-Path $staging 'payload') | Out-Null
-        Copy-DeployableTree $paths.runtime (Join-Path $staging 'payload')
+        $payload = Join-Path $staging 'payload'
+        Copy-DeployableTree $paths.runtime $payload
+        $featureProfile = @(Copy-FeatureProfileToRelease $FeatureRuntime $payload)
         $runtime = Test-Runtime (Join-Path $staging 'payload')
         if (-not $runtime.valid) { throw "Release payload is incomplete: $($runtime.missing -join ', ')" }
         $audit = Test-StillHungerContent (Join-Path $staging 'payload') $script:Project -Payload
@@ -1597,6 +1671,7 @@ function New-CleanRelease {
             commits = $commits
             api = $build.api
             textureConversion = $textureConversion
+            featureProfile = @($featureProfile)
             audit = $audit
             files = Get-HashInventory (Join-Path $staging 'payload')
         }
@@ -1755,7 +1830,7 @@ function Invoke-Finish {
         }
         else {
             $releaseId = Get-NextReleaseId
-            $releaseResult = New-CleanRelease $releaseId
+            $releaseResult = New-CleanRelease $releaseId ([string]$paths.runtime)
         }
     }
     catch {
@@ -1965,6 +2040,7 @@ function Invoke-Promote {
     if (Test-Path -LiteralPath $production) {
         foreach ($entry in $script:Project.userOwned) {
             $pattern = [string]$entry
+            if (Test-FeatureProfile $pattern) { continue }
             if ($pattern.EndsWith('/**')) {
                 $relative = $pattern.Substring(0, $pattern.Length - 3)
                 $source = Join-Path $production ($relative -replace '/', '\')

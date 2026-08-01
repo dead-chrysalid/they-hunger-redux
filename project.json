@@ -157,6 +157,9 @@
     "StillHunger/voice_ban.dt",
     "StillHunger/SAVE/**"
   ],
+  "featureProfile": [
+    "StillHunger/config.cfg"
+  ],
   "initialDefaults": {
     "root": "repos/content/.workspace/defaults/root",
     "game": "repos/content/.workspace/defaults/StillHunger"
