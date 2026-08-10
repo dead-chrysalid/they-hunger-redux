@@ -847,6 +847,14 @@ function Invoke-BuildSet {
         Copy-Item -LiteralPath $source -Destination (Join-Path $rtBin $artifact) -Force
     }
     Copy-Item -LiteralPath (Join-Path $rtglBuild 'RayTracedGL1.dll') -Destination (Join-Path $rtBin 'RayTracedGL1.dll') -Force
+    $rtglShaderOutput = Join-Path $rtglBuild 'shaders'
+    $runtimeShaderOutput = Join-Path $Paths.runtime 'rt\shaders'
+    $rtglShaderFiles = @(Get-ChildItem -LiteralPath $rtglShaderOutput -Filter '*.spv' -File)
+    if ($rtglShaderFiles.Count -eq 0) { throw "Missing renderer shader artifacts: $rtglShaderOutput" }
+    New-Item -ItemType Directory -Force -Path $runtimeShaderOutput | Out-Null
+    foreach ($shader in $rtglShaderFiles) {
+        Copy-Item -LiteralPath $shader.FullName -Destination (Join-Path $runtimeShaderOutput $shader.Name) -Force
+    }
     Copy-Item -LiteralPath (Join-Path $sdl2 'lib\x64\SDL2.dll') -Destination (Join-Path $rtBin 'SDL2.dll') -Force
 
     $client = Join-Path $sdkBuild "cl_dll\$configuration\client_amd64.dll"
