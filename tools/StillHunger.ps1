@@ -385,6 +385,21 @@ function Test-UserOwned {
     return $false
 }
 
+function Convert-StateTimestampToUtc {
+    param([Parameter(Mandatory)]$Value)
+    if ($Value -is [DateTimeOffset]) {
+        return ([DateTimeOffset]$Value).UtcDateTime
+    }
+    if ($Value -is [DateTime]) {
+        return ([DateTime]$Value).ToUniversalTime()
+    }
+    return [DateTimeOffset]::Parse(
+        [string]$Value,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind
+    ).UtcDateTime
+}
+
 function Test-FeatureProfile {
     param([Parameter(Mandatory)][string]$RelativePath)
     $relative = $RelativePath.Replace('\', '/')
@@ -1312,8 +1327,8 @@ function Invoke-Status {
     if ($buildCurrent -and $smoke -and $smoke.success) {
         try {
             $smokeCurrent = (
-                [DateTime]::Parse([string]$smoke.finishedUtc).ToUniversalTime() -ge
-                [DateTime]::Parse([string]$build.builtUtc).ToUniversalTime()
+                (Convert-StateTimestampToUtc $smoke.finishedUtc) -ge
+                (Convert-StateTimestampToUtc $build.builtUtc)
             )
         }
         catch {
@@ -1796,8 +1811,8 @@ function Invoke-Finish {
     if ($mainuiActual -ne $build.commits.mainui) { throw 'mainui changed after the last build.' }
     try {
         $smokeAfterBuild = (
-            [DateTime]::Parse([string]$smoke.finishedUtc).ToUniversalTime() -ge
-            [DateTime]::Parse([string]$build.builtUtc).ToUniversalTime()
+            (Convert-StateTimestampToUtc $smoke.finishedUtc) -ge
+            (Convert-StateTimestampToUtc $build.builtUtc)
         )
     }
     catch {
