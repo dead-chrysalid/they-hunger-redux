@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "name": "They Still Hunger",
-  "gameToken": "StillHunger",
+  "name": "They Hunger Redux",
+  "gameToken": "HungerRedux",
   "paths": {
     "repositories": {
       "engine": "repos/engine",
@@ -17,7 +17,7 @@
     "dependencyManifests": "manifests/dependencies",
     "runtimeBase": "runtime-base",
     "archives": "archives",
-    "production": "D:/Games/They Still Hunger"
+    "production": "D:/Games/They Hunger Redux"
   },
   "branches": {
     "engine": "master",
@@ -65,8 +65,8 @@
       "rt_bin/SDL2.dll"
     ],
     "sdk": [
-      "StillHunger/cl_dlls/client_amd64.dll",
-      "StillHunger/dlls/einar_amd64.dll"
+      "HungerRedux/cl_dlls/client_amd64.dll",
+      "HungerRedux/dlls/einar_amd64.dll"
     ]
   },
   "releaseExclusions": [
@@ -117,19 +117,19 @@
     "README-RT-LIVE-EDITOR.txt",
     "rt_bin/*.bat",
     "rt_bin/VERSION*",
-    "StillHunger/.xash_id",
-    "StillHunger/cached.wad",
-    "StillHunger/console_history.txt",
-    "StillHunger/custom.hpk",
-    "StillHunger/tempdecal.wad",
-    "StillHunger/voice_ban.dt",
-    "StillHunger/SAVE",
-    "StillHunger/SAVE/**",
-    "StillHunger/in_progress_resources",
-    "StillHunger/in_progress_resources/**",
-    "StillHunger/sprites/HUD/inprogress",
-    "StillHunger/sprites/HUD/inprogress/**",
-    "StillHunger/liblist.gam",
+    "HungerRedux/.xash_id",
+    "HungerRedux/cached.wad",
+    "HungerRedux/console_history.txt",
+    "HungerRedux/custom.hpk",
+    "HungerRedux/tempdecal.wad",
+    "HungerRedux/voice_ban.dt",
+    "HungerRedux/SAVE",
+    "HungerRedux/SAVE/**",
+    "HungerRedux/in_progress_resources",
+    "HungerRedux/in_progress_resources/**",
+    "HungerRedux/sprites/HUD/inprogress",
+    "HungerRedux/sprites/HUD/inprogress/**",
+    "HungerRedux/liblist.gam",
     "rt/CreateKTX2Cache.txt",
     "rt/mat_dev",
     "rt/mat_dev/**",
@@ -146,30 +146,28 @@
     "imgui.ini",
     "RayTracedGL1.json",
     "rt_bin/OptiScaler.ini",
-    "StillHunger/config.cfg",
-    "StillHunger/rt.cfg",
-    "StillHunger/userconfig.cfg",
-    "StillHunger/video.cfg",
-    "StillHunger/.xash_id",
-    "StillHunger/console_history.txt",
-    "StillHunger/custom.hpk",
-    "StillHunger/tempdecal.wad",
-    "StillHunger/voice_ban.dt",
-    "StillHunger/SAVE/**"
+    "HungerRedux/config.cfg",
+    "HungerRedux/rt.cfg",
+    "HungerRedux/userconfig.cfg",
+    "HungerRedux/video.cfg",
+    "HungerRedux/.xash_id",
+    "HungerRedux/console_history.txt",
+    "HungerRedux/custom.hpk",
+    "HungerRedux/tempdecal.wad",
+    "HungerRedux/voice_ban.dt",
+    "HungerRedux/SAVE/**"
   ],
   "featureProfile": [
-    "StillHunger/config.cfg"
+    "HungerRedux/config.cfg"
   ],
   "initialDefaults": {
     "root": "repos/content/.workspace/defaults/root",
-    "game": "repos/content/.workspace/defaults/StillHunger"
+    "game": "repos/content/.workspace/defaults/HungerRedux"
   },
   "development": {
-    "launchArguments": [
-      "-dev"
-    ],
+    "launchArguments": [],
     "renderer": {
-      "developerMode": true,
+      "developerMode": false,
       "developerWindow": false
     },
     "gameCommands": [
@@ -192,6 +190,20 @@
     "optiscaler": "repos/content/.workspace/distribution/optiscaler-0.9.4"
   },
   "releasePolicy": {
+    "resetProgressCvars": [
+      "hud_tutorials_seen",
+      "sh_guide_weapons_unlocked",
+      "sh_guide_weapons_new",
+      "sh_guide_weapons_notice",
+      "sh_bestiary_unlocked",
+      "sh_bestiary_new",
+      "sh_bestiary_notice"
+    ],
+    "resetOnPromotePaths": [
+      "HungerRedux/SAVE/**"
+    ],
+    "nodeGraphVersion": 160,
+    "nodeGraphBuildTimeoutSeconds": 60,
     "campaignMaps": [
       "menu",
       "thintro",
@@ -316,17 +328,17 @@
       "valve/.fontcache/**",
       "valve/maps.lst",
       "valve/mapcycle.txt",
-      "StillHunger/maps/thdm*",
-      "StillHunger/maps/test*",
-      "StillHunger/maps/killfx_enemy_test*",
-      "StillHunger/maps/zombie_headless_gallery*",
-      "StillHunger/sprites/hud.txt",
-      "StillHunger/sprites/weapon_*.txt",
-      "StillHunger/sprites/320hud*.spr",
-      "StillHunger/sprites/640hud*.spr",
-      "StillHunger/sprites/tfchud*.spr",
-      "StillHunger/sprites/tfc_dmsg.spr",
-      "StillHunger/liblist.gam",
+      "HungerRedux/maps/thdm*",
+      "HungerRedux/maps/test*",
+      "HungerRedux/maps/killfx_enemy_test*",
+      "HungerRedux/maps/zombie_headless_gallery*",
+      "HungerRedux/sprites/hud.txt",
+      "HungerRedux/sprites/weapon_*.txt",
+      "HungerRedux/sprites/320hud*.spr",
+      "HungerRedux/sprites/640hud*.spr",
+      "HungerRedux/sprites/tfchud*.spr",
+      "HungerRedux/sprites/tfc_dmsg.spr",
+      "HungerRedux/liblist.gam",
       "rt/CreateKTX2Cache.txt",
       "rt/scenes/**/mat_junction/**",
       "rt/scenes/test/**",
@@ -365,7 +377,7 @@
     "seconds": 25,
     "arguments": [
       "-game",
-      "StillHunger",
+      "HungerRedux",
       "-console",
       "-log",
       "-windowed",

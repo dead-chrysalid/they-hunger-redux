@@ -1,9 +1,11 @@
-# They Still Hunger unified project contract
+# They Hunger Redux unified project contract
 
 - Read `project.json` before acting; it is the only path and interface authority.
+- On Codex desktop for Windows, run every unified project command through `tools\StillHunger.cmd`; never invoke `tools\StillHunger.ps1` directly. The `.cmd` entrypoint collapses Codex's duplicate `Path`/`PATH` variables to one process-local value and calls Windows PowerShell by absolute system path, bypassing any bundled `powershell.exe` shim. The unified script resolves the installation that owns `git.exe`; shell-backed Git commands run inside that installation's login Bash so Codex cannot replace their helper PATH.
+- Do not mutate the user or machine `Path`/`PATH` to work around project commands. If `basename`, `sed`, or `git-sh-setup` is ever missing, treat it as a wrapper bootstrap defect and fix `Initialize-GitToolchainPath` in `tools\StillHunger.ps1`; do not improvise a session-specific PATH command.
 - Start new engine, SDK, RayTracedGL1, or content work with `tools\StillHunger.cmd new -Name <feature>`. Work only in its matching `work\<feature>` trees.
 - Use `tools\StillHunger.cmd sync -Name <feature>` after another feature reaches `master`. It merges each component master into the clean feature worktree and invalidates stale build/smoke evidence. `finish` refuses a feature that remains behind master.
-- StillHunger uses Sultim `ref_gl` and RayTracedGL1, never the separate `ref_vk` project.
+- They Hunger Redux uses Sultim `ref_gl` and RayTracedGL1, never the separate `ref_vk` project.
 - Keep engine and SDK client API 10 compatible. Keep engine and RayTracedGL1 renderer API 4 compatible.
 - Build commands are build-only. Never configure component builds to deploy directly into production.
 - A valid engine runtime contains the complete paired engine, renderer, menu, and SDL2 set; a valid SDK runtime contains both game DLLs.

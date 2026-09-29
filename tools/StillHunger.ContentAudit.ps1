@@ -228,8 +228,8 @@ function Test-StillHungerContent {
             if (-not (Test-Path -LiteralPath $fallback -PathType Leaf)) { continue }
             $fallbackFile = Get-Item -LiteralPath $fallback
             if ($gameFile.Length -ne $fallbackFile.Length) { continue }
-            $gameHash = (Get-FileHash -LiteralPath $gameFile.FullName -Algorithm SHA256).Hash
-            $fallbackHash = (Get-FileHash -LiteralPath $fallback -Algorithm SHA256).Hash
+            $gameHash = Get-FileSha256 $gameFile.FullName
+            $fallbackHash = Get-FileSha256 $fallback
             if ($gameHash -ceq $fallbackHash) {
                 $errors.Add("duplicate-valve-override:$($relative.Replace('\', '/'))")
             }

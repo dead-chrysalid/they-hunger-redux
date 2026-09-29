@@ -28,6 +28,61 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
+function Initialize-GitToolchainPath {
+    # Sandboxed/embedded shells can expose git.exe while omitting the Unix
+    # helpers used by Git for Windows scripts such as git-submodule. Resolve
+    # the installation that owns git.exe and repair PATH only for this wrapper
+    # process; never depend on a user or machine PATH edit.
+    $gitCommand = Get-Command git.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    $directory = Split-Path -Parent $gitCommand.Source
+    $gitRoot = $null
+
+    for ($depth = 0; $depth -lt 5 -and $directory; $depth++) {
+        $basename = Join-Path $directory 'usr\bin\basename.exe'
+        $gitShellSetup = Join-Path $directory 'mingw64\libexec\git-core\git-sh-setup'
+        if ((Test-Path -LiteralPath $basename -PathType Leaf) -and
+            (Test-Path -LiteralPath $gitShellSetup -PathType Leaf)) {
+            $gitRoot = $directory
+            break
+        }
+
+        $parent = Split-Path -Parent $directory
+        if ($parent -eq $directory) { break }
+        $directory = $parent
+    }
+
+    if (-not $gitRoot) {
+        throw "Could not resolve the complete Git for Windows toolchain from '$($gitCommand.Source)'."
+    }
+
+    $requiredPaths = @(
+        (Join-Path $gitRoot 'cmd'),
+        (Join-Path $gitRoot 'bin'),
+        (Join-Path $gitRoot 'usr\bin'),
+        (Join-Path $gitRoot 'mingw64\bin'),
+        (Join-Path $gitRoot 'mingw64\libexec\git-core')
+    )
+    $existingPaths = @($env:Path -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $env:Path = (@($requiredPaths + $existingPaths) | Select-Object -Unique) -join ';'
+    $script:GitBash = Join-Path $gitRoot 'bin\bash.exe'
+}
+
+Initialize-GitToolchainPath
+
+function Get-FileSha256 {
+    param([Parameter(Mandatory)][string]$Path)
+    $stream = [IO.File]::OpenRead([IO.Path]::GetFullPath($Path))
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $sha256.ComputeHash($stream)
+        return ([BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant())
+    }
+    finally {
+        $sha256.Dispose()
+        $stream.Dispose()
+    }
+}
+
 $script:ProjectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $script:ProjectFile = Join-Path $script:ProjectRoot 'project.json'
 $script:Project = Get-Content -LiteralPath $script:ProjectFile -Raw | ConvertFrom-Json
@@ -302,7 +357,7 @@ function Get-HashInventory {
                 [ordered]@{
                     path = $_.FullName.Substring($rootPath.Length + 1).Replace('\', '/')
                     length = $_.Length
-                    sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                    sha256 = Get-FileSha256 $_.FullName
                 }
             }
     )
@@ -383,6 +438,39 @@ function Test-UserOwned {
         }
     }
     return $false
+}
+
+function Test-ResetOnPromote {
+    param([Parameter(Mandatory)][string]$RelativePath)
+    $relative = $RelativePath.Replace('\', '/')
+    foreach ($pattern in $script:Project.releasePolicy.resetOnPromotePaths) {
+        if ([System.Management.Automation.WildcardPattern]::new(
+                [string]$pattern,
+                [System.Management.Automation.WildcardOptions]::IgnoreCase
+            ).IsMatch($relative)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Invoke-LoggedGitScript {
+    param(
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [Parameter(Mandatory)][string]$Log
+    )
+    # Codex may restore its parent PATH when a native child starts, defeating a
+    # PowerShell-only PATH repair. A Git Bash login shell reconstructs /usr/bin
+    # and Git's exec path before shell-backed commands such as submodule run.
+    $singleQuote = [string][char]39
+    $doubleQuote = [string][char]34
+    $embeddedQuote = $singleQuote + $doubleQuote + $singleQuote + $doubleQuote + $singleQuote
+    $quotedArguments = @($Arguments | ForEach-Object {
+        $singleQuote + $_.Replace($singleQuote, $embeddedQuote) + $singleQuote
+    })
+    $commandLine = 'exec git ' + ($quotedArguments -join ' ')
+    $bashArguments = @('-lc', $commandLine)
+    Invoke-Logged -Executable $script:GitBash -Arguments $bashArguments -Log $Log
 }
 
 function Convert-StateTimestampToUtc {
@@ -573,22 +661,93 @@ function Initialize-Submodules {
         [Parameter(Mandatory)][string]$LogRoot
     )
     $mainui = Get-RepoPath 'mainui'
-    Invoke-Logged 'git' @(
+    Invoke-LoggedGitScript -Arguments @(
         '-C', $Engine,
         '-c', 'protocol.file.allow=always',
         '-c', "submodule.mainui.url=$($mainui.Replace('\', '/'))",
         'submodule', 'update', '--init', '--recursive'
-    ) (Join-Path $LogRoot 'engine-submodules.log')
-    Invoke-Logged 'git' @(
+    ) -Log (Join-Path $LogRoot 'engine-submodules.log')
+    Invoke-LoggedGitScript -Arguments @(
         '-C', $Rtgl1,
         'submodule', 'update', '--init', '--recursive'
-    ) (Join-Path $LogRoot 'rtgl1-submodules.log')
+    ) -Log (Join-Path $LogRoot 'rtgl1-submodules.log')
+}
+
+function Test-MapHasNavigationNodes {
+    param([Parameter(Mandatory)][string]$Bsp)
+    $bytes = [IO.File]::ReadAllBytes($Bsp)
+    if ($bytes.Length -lt 124 -or [BitConverter]::ToInt32($bytes, 0) -ne 30) {
+        throw "Invalid GoldSrc BSP header: $Bsp"
+    }
+    $offset = [BitConverter]::ToInt32($bytes, 4)
+    $length = [BitConverter]::ToInt32($bytes, 8)
+    if ($offset -lt 0 -or $length -lt 0 -or $offset -gt $bytes.Length -or
+        $length -gt ($bytes.Length - $offset)) {
+        throw "Invalid entity lump in BSP: $Bsp"
+    }
+    $entities = [Text.Encoding]::ASCII.GetString($bytes, $offset, $length)
+    return $entities -match '"classname"\s+"info_node(?:_air)?"'
+}
+
+function Test-CurrentNodeGraph {
+    param(
+        [Parameter(Mandatory)][string]$Bsp,
+        [Parameter(Mandatory)][string]$Graph
+    )
+    if (-not (Test-Path -LiteralPath $Graph -PathType Leaf)) { return $false }
+    $graphFile = Get-Item -LiteralPath $Graph
+    if ($graphFile.Length -lt 4 -or $graphFile.LastWriteTimeUtc -lt (Get-Item -LiteralPath $Bsp).LastWriteTimeUtc) {
+        return $false
+    }
+    # An exclusive read also proves the game has closed the graph after writing it.
+    try { $stream = [IO.File]::Open($Graph, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None) }
+    catch [IO.IOException] { return $false }
+    try {
+        $header = [byte[]]::new(4)
+        if ($stream.Read($header, 0, 4) -ne 4) { return $false }
+        return [BitConverter]::ToInt32($header, 0) -eq [int]$script:Project.releasePolicy.nodeGraphVersion
+    }
+    finally { $stream.Dispose() }
+}
+
+function Update-ReleaseNodeGraphs {
+    param(
+        [Parameter(Mandatory)][string]$Runtime,
+        [Parameter(Mandatory)][string]$StateRoot
+    )
+    $mapsRoot = Join-Path $Runtime "$($script:Project.gameToken)\maps"
+    $graphsRoot = Join-Path $mapsRoot 'graphs'
+    $rebuilt = [Collections.Generic.List[string]]::new()
+    $checked = [Collections.Generic.List[string]]::new()
+    foreach ($mapName in $script:Project.releasePolicy.campaignMaps) {
+        $name = [string]$mapName
+        $bsp = Join-Path $mapsRoot "$name.bsp"
+        if (-not (Test-Path -LiteralPath $bsp -PathType Leaf)) {
+            throw "Campaign BSP is missing while preparing node graphs: $bsp"
+        }
+        if (-not (Test-MapHasNavigationNodes $bsp)) { continue }
+        $checked.Add($name)
+        $graph = Join-Path $graphsRoot "$name.nod"
+        # Checkout timestamps cannot prove a graph matches its BSP. Rebuild every node-bearing map.
+        # Work only in the detached release runtime; authored content is untouched.
+        if (Test-Path -LiteralPath $graph -PathType Leaf) {
+            Remove-Item -LiteralPath $graph -Force
+        }
+        $null = Invoke-Smoke $Runtime (Join-Path $StateRoot 'node-graphs') 'release-node-graph' -Map $name `
+            -Seconds ([int]$script:Project.releasePolicy.nodeGraphBuildTimeoutSeconds) `
+            -RecordName "maps\$name.json" -SkipAudit -NoScreenshot -ReadyGraphBsp $bsp -ReadyGraphPath $graph
+        if (-not (Test-CurrentNodeGraph $bsp $graph)) {
+            throw "Node graph for '$name' was not regenerated to match its BSP and graph version."
+        }
+        $rebuilt.Add($name)
+    }
+    return [ordered]@{ checked = @($checked); rebuilt = @($rebuilt) }
 }
 
 function Copy-InitialDefaults {
     param([Parameter(Mandatory)][string]$Runtime)
     $rootDefaults = Join-Path $Runtime '.workspace\defaults\root'
-    $gameDefaults = Join-Path $Runtime '.workspace\defaults\StillHunger'
+    $gameDefaults = Join-Path $Runtime (".workspace\defaults\$($script:Project.gameToken)")
     foreach ($file in Get-ChildItem -LiteralPath $rootDefaults -Recurse -File) {
         $relative = $file.FullName.Substring($rootDefaults.Length + 1)
         $target = Join-Path $Runtime $relative
@@ -907,7 +1066,7 @@ function Test-Runtime {
     foreach ($artifact in $script:Project.requiredArtifacts.sdk) {
         $required += [string]$artifact
     }
-    $required += @('rt/data/scenes.json', 'rt/data/textures.json', 'StillHunger/gameinfo.txt', 'valve/gameinfo.txt')
+    $required += @('rt/data/scenes.json', 'rt/data/textures.json', "$($script:Project.gameToken)/gameinfo.txt", 'valve/gameinfo.txt')
     $missing = @(
         foreach ($relative in $required) {
             if (-not (Test-Path -LiteralPath (Join-Path $Runtime ($relative -replace '/', '\')) -PathType Leaf)) {
@@ -1038,6 +1197,8 @@ function Invoke-Smoke {
         [string]$Map,
         [int]$Seconds = 0,
         [string]$RecordName = 'smoke.json',
+        [string]$ReadyGraphBsp,
+        [string]$ReadyGraphPath,
         [switch]$MenuOnly,
         [switch]$SkipAudit,
         [switch]$NoScreenshot
@@ -1093,6 +1254,8 @@ function Invoke-Smoke {
             Start-Sleep -Seconds 1
             $process.Refresh()
             if ($process.HasExited) { break }
+            if ($ReadyGraphBsp -and $ReadyGraphPath -and
+                (Test-CurrentNodeGraph $ReadyGraphBsp $ReadyGraphPath)) { break }
         }
         if ($Screenshots -and -not $NoScreenshot -and -not $process.HasExited) {
             $shot = Save-Screenshot $process (Join-Path $StateRoot "screenshots\$Kind-$($startTime.ToString('yyyyMMdd-HHmmss')).png")
@@ -1525,14 +1688,14 @@ function Invoke-BuildFeature {
                 'rt_bin\menu.dll',
                 'rt_bin\RayTracedGL1.dll',
                 'rt_bin\SDL2.dll',
-                'StillHunger\cl_dlls\client_amd64.dll',
-                'StillHunger\dlls\einar_amd64.dll'
+                "$($script:Project.gameToken)\cl_dlls\client_amd64.dll",
+                "$($script:Project.gameToken)\dlls\einar_amd64.dll"
             )) {
                 $file = Join-Path $paths.runtime $relative
                 [ordered]@{
                     path = $relative.Replace('\', '/')
                     length = (Get-Item -LiteralPath $file).Length
-                    sha256 = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+                    sha256 = Get-FileSha256 $file
                 }
             }
         )
@@ -1672,6 +1835,7 @@ function New-CleanRelease {
         }
         $build = Invoke-BuildSet $buildPaths $stateRoot
         $textureConversion = Invoke-TextureConversion $paths.runtime $stateRoot
+        $nodeGraphs = Update-ReleaseNodeGraphs $paths.runtime $stateRoot
         New-Item -ItemType Directory -Force -Path (Join-Path $staging 'payload') | Out-Null
         $payload = Join-Path $staging 'payload'
         Copy-DeployableTree $paths.runtime $payload
@@ -1694,6 +1858,7 @@ function New-CleanRelease {
             commits = $commits
             api = $build.api
             textureConversion = $textureConversion
+            nodeGraphs = $nodeGraphs
             featureProfile = @($featureProfile)
             audit = $audit
             files = Get-HashInventory (Join-Path $staging 'payload')
@@ -1903,7 +2068,7 @@ function Assert-ReleaseHashes {
             $errors.Add("missing:$relative")
             continue
         }
-        $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+        $hash = Get-FileSha256 $file
         if ($hash -cne [string]$entry.sha256) { $errors.Add("hash:$relative") }
     }
     if ($errors.Count -gt 0) { throw "Release hash verification failed: $($errors -join ', ')" }
@@ -1965,6 +2130,10 @@ function Set-CleanConfigFile {
 
     $output = [Collections.Generic.List[string]]::new()
     $hasCheatSetting = $false
+    $progressCvars = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $script:Project.releasePolicy.resetProgressCvars) {
+        $null = $progressCvars.Add([string]$name)
+    }
     foreach ($line in Get-Content -LiteralPath $Path) {
         if ($line -match '^\s*sv_cheats\s+') {
             $output.Add('sv_cheats 0')
@@ -1973,10 +2142,15 @@ function Set-CleanConfigFile {
         }
         if ($line -match '^\s*cl_trace_messages\s+') { continue }
         if ($line -match '^\s*bind\s+"?[^"\s]+"?\s+"?(impulse\s+101|noclip|th_give_startitems)"?\s*$') { continue }
+        if ($line -match '^\s*"?([A-Za-z_][A-Za-z0-9_]*)"?\s+' -and
+            $progressCvars.Contains($Matches[1])) { continue }
         $output.Add($line)
     }
     if ($EnsureCheatsOff -and -not $hasCheatSetting) {
         $output.Insert(0, 'sv_cheats 0')
+    }
+    foreach ($name in $script:Project.releasePolicy.resetProgressCvars) {
+        $output.Add("$name `"0`"")
     }
     [IO.File]::WriteAllLines($Path, @($output), [Text.UTF8Encoding]::new($false))
     return $true
@@ -2064,6 +2238,7 @@ function Invoke-Promote {
         foreach ($entry in $script:Project.userOwned) {
             $pattern = [string]$entry
             if (Test-FeatureProfile $pattern) { continue }
+            if (Test-ResetOnPromote $pattern) { continue }
             if ($pattern.EndsWith('/**')) {
                 $relative = $pattern.Substring(0, $pattern.Length - 3)
                 $source = Join-Path $production ($relative -replace '/', '\')

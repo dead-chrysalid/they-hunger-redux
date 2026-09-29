@@ -25,13 +25,13 @@ Assert-True ($project.requiredArtifacts.sdk.Count -eq 2) 'Both SDK DLLs must be 
 Assert-True ($project.releaseExclusions -contains '.workspace/**') 'Workspace-only content must be excluded from releases.'
 Assert-True ($project.releaseExclusions -contains 'rt/mat_dev/**') 'Editable texture sources must be excluded from releases.'
 Assert-True ($project.releaseExclusions -contains 'rt/scenes/**/mat_junction/**') 'Blender texture junctions must be excluded from releases.'
-Assert-True ($project.userOwned -contains 'StillHunger/SAVE/**') 'Saves must be user-owned.'
-Assert-True ($project.featureProfile -contains 'StillHunger/config.cfg') 'Feature releases must carry the tuned config profile.'
+Assert-True ($project.userOwned -contains 'HungerRedux/SAVE/**') 'Saves must be user-owned.'
+Assert-True ($project.featureProfile -contains 'HungerRedux/config.cfg') 'Feature releases must carry the tuned config profile.'
 foreach ($profileFile in $project.featureProfile) {
     Assert-True ($project.userOwned -contains [string]$profileFile) "Feature profile file must also be user-owned: $profileFile"
 }
-Assert-True ($project.development.launchArguments -contains '-dev') 'Feature launches must enable engine developer mode.'
-Assert-True ([bool]$project.development.renderer.developerMode) 'Feature renderer developer mode must be enabled.'
+Assert-True ($project.development.launchArguments -notcontains '-dev') 'Feature launches must keep engine developer logging disabled.'
+Assert-True (-not [bool]$project.development.renderer.developerMode) 'Feature renderer developer logging must be disabled.'
 Assert-True (-not [bool]$project.development.renderer.developerWindow) 'Feature renderer developer window must default to disabled for OptiScaler compatibility.'
 Assert-True ($project.development.gameCommands -contains 'sv_cheats 1') 'Feature profiles must enable cheats for authoring.'
 Assert-True ([string]$project.textureAuthoring.script -eq 'tools/CreateKTX2.py') 'Texture conversion must use the project-level tool.'
