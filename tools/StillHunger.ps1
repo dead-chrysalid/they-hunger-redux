@@ -661,10 +661,14 @@ function Initialize-Submodules {
         [Parameter(Mandatory)][string]$LogRoot
     )
     $mainui = Get-RepoPath 'mainui'
+    # A release checkout must resolve the local menu commit before Git tries
+    # the upstream URL from .gitmodules. -c alone is not passed to every
+    # nested clone/fetch performed by submodule update.
+    $mainuiUrl = $mainui.Replace('\', '/')
+    $null = Invoke-Git $Engine @('config', 'submodule.mainui.url', $mainuiUrl)
     Invoke-LoggedGitScript -Arguments @(
         '-C', $Engine,
         '-c', 'protocol.file.allow=always',
-        '-c', "submodule.mainui.url=$($mainui.Replace('\', '/'))",
         'submodule', 'update', '--init', '--recursive'
     ) -Log (Join-Path $LogRoot 'engine-submodules.log')
     Invoke-LoggedGitScript -Arguments @(
