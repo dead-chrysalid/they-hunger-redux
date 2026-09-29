@@ -939,7 +939,7 @@ function Invoke-BuildSet {
     Initialize-Submodules $Paths.engine $Paths.rtgl1 $logs
 
     $rtglBuild = Join-Path $Paths.rtgl1 ($script:Project.build.rtgl1Build -replace '/', '\')
-    Invoke-Logged 'cmake' @(
+    $rtglConfigure = @(
         '-S', $Paths.rtgl1,
         '-B', $rtglBuild,
         '-A', 'x64',
@@ -949,7 +949,16 @@ function Invoke-BuildSet {
         '-DRG_WITH_EDITOR_TESTS=ON',
         '-DRG_WITH_EXAMPLES=OFF',
         '-DCMAKE_POLICY_VERSION_MINIMUM=3.5'
-    ) (Join-Path $logs 'rtgl1-configure.log')
+    )
+    foreach ($dependency in @('fmt', 'nanorange')) {
+        $source = Resolve-ProjectPath ([string]$script:Project.build.rtgl1LocalSources.$dependency)
+        if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+            throw "The local renderer dependency '$dependency' is missing: $source"
+        }
+        $rtglConfigure += "-DFETCHCONTENT_SOURCE_DIR_$($dependency.ToUpperInvariant())=$source"
+    }
+    $rtglConfigure += '-DFETCHCONTENT_UPDATES_DISCONNECTED=ON'
+    Invoke-Logged 'cmake' $rtglConfigure (Join-Path $logs 'rtgl1-configure.log')
     Invoke-Logged 'cmake' @(
         '--build', $rtglBuild,
         '--config', $configuration,

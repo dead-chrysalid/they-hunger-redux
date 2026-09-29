@@ -370,7 +370,11 @@
     "engineSolution": "xash3d-fwgs.sln",
     "engineOutput": "x64/Release",
     "sdkBuild": "build",
-    "rtgl1Build": "Build/x64-Release"
+    "rtgl1Build": "Build/x64-Release",
+    "rtgl1LocalSources": {
+      "fmt": "repos/rtgl1/Build/x64-Release/_deps/fmt-src",
+      "nanorange": "repos/rtgl1/Build/x64-Release/_deps/nanorange-src"
+    }
   },
   "smoke": {
     "map": "they23",
