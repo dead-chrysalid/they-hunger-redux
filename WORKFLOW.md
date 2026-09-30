@@ -35,6 +35,22 @@ Commit intentional changes inside the affected worktrees. `status` reports branc
 
 `build` compiles into component build directories and assembles only the feature runtime. It never writes into preprod or production.
 
+## Small settings hotfixes
+
+For numeric profile defaults listed under `hotfixPolicy.numericDefaults` in `project.json`, use this shorter path:
+
+```powershell
+.\tools\StillHunger.cmd hotfix-defaults -Name quiet-defaults -SettingsFile tools\hotfix-quiet-defaults.json
+```
+
+The JSON object names the cvars and their numeric values. The command validates their allowed ranges, requires idle and complete production, creates a temporary content worktree, commits the initial config template and fast-forwards content master, then removes that worktree and branch. It updates only the selected settings in production `config.cfg` and any matching direct assignments in `userconfig.cfg`. Other settings and saves stay intact. No build, full release, preprod staging, or game launch is needed; verification checks the exact resulting config text. New profiles inherit the source template. Existing feature runtimes remain unchanged and must sync before finishing.
+
+Production already containing the requested values is a successful no-op for those files. Immutable release payloads and release metadata stay unchanged because configs are user-owned. This changes profile defaults rather than compiled engine/SDK fallback values. Code, assets, maps, shaders, or other cvars still use the full feature/release workflow.
+
+Backups and the operation journal are retained in `archives/hotfix-<name>-<timestamp>-<id>`, with the latest successful record in `.state/hotfix-defaults.json`. Runtime write failures restore the saved configs; any integrated source commit remains recorded and retryable. If interrupted, inspect that journal before retrying. To undo a completed hotfix, apply the previous numeric values through the same command; the archived configs retain the exact prior bytes for recovery. Do not delete these archives without approval.
+
+Run `.\tools\StillHunger.cmd test-hotfix` for the disposable-project integration checks.
+
 ## Texture authoring and release conversion
 
 Run this once on a development machine:

@@ -11,6 +11,8 @@ param(
         'smoke-feature',
         'smoke-campaign',
         'finish',
+        'hotfix-defaults',
+        'test-hotfix',
         'launch-preprod',
         'smoke-preprod',
         'promote',
@@ -21,6 +23,7 @@ param(
 
     [string]$Name,
     [string]$Release,
+    [string]$SettingsFile,
     [switch]$Screenshots
 )
 
@@ -87,6 +90,7 @@ $script:ProjectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $script:ProjectFile = Join-Path $script:ProjectRoot 'project.json'
 $script:Project = Get-Content -LiteralPath $script:ProjectFile -Raw | ConvertFrom-Json
 . (Join-Path $PSScriptRoot 'StillHunger.ContentAudit.ps1')
+. (Join-Path $PSScriptRoot 'StillHunger.Hotfix.ps1')
 $script:LockStream = $null
 
 function Resolve-ProjectPath {
@@ -2376,6 +2380,8 @@ try {
             Invoke-SmokeCampaign
         }
         'finish' { Invoke-Finish }
+        'hotfix-defaults' { Invoke-HotfixDefaults }
+        'test-hotfix' { . (Join-Path $PSScriptRoot 'Test-StillHunger-Hotfix.ps1') }
         'launch-preprod' {
             Start-Interactive (Resolve-ProjectPath $script:Project.paths.preprod) 'preprod'
         }

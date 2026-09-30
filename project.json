@@ -157,6 +157,12 @@
     "HungerRedux/voice_ban.dt",
     "HungerRedux/SAVE/**"
   ],
+  "hotfixPolicy": {
+    "numericDefaults": {
+      "con_notifytime": { "min": 0, "max": 60 },
+      "sv_ignore_monster_fade_corpse": { "min": 0, "max": 1, "integer": true }
+    }
+  },
   "featureProfile": [
     "HungerRedux/config.cfg"
   ],

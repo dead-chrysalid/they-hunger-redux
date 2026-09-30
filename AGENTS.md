@@ -10,6 +10,7 @@
 - Build commands are build-only. Never configure component builds to deploy directly into production.
 - A valid engine runtime contains the complete paired engine, renderer, menu, and SDL2 set; a valid SDK runtime contains both game DLLs.
 - Stage releases in preprod and smoke-test the exact payload before promotion. Preserve declared user-owned files on subsequent promotions.
+- Exception for numeric profile defaults: use `tools\StillHunger.cmd hotfix-defaults -Name <hotfix> -SettingsFile <json>`. Only `project.json`'s `hotfixPolicy.numericDefaults` settings qualify. This command owns a temporary content worktree, integrates the template change into master, archives the affected configs, and applies only the named settings to idle production. It skips builds, releases, and preprod; all other changes retain the full feature/release pathway. Do not patch immutable release payloads or existing feature runtimes.
 - Agents may launch feature, preprod, and production runtimes when verification helps. Inspect existing processes first, announce interactive launches, and terminate only the exact process the agent started.
 - Finish completed work by merging it into each canonical local `master` and removing completed branches/worktrees. If work intentionally remains experimental, record that explicitly in `feature.json` and at handoff.
 - Do not delete dated archives, rollback installations, or legacy repositories without explicit user approval.
