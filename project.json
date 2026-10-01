@@ -363,6 +363,8 @@
       "Unknown command.*richpresence_",
       "Unknown command.*sv_language",
       "Unknown command.*sk_plr_egon",
+      "Unknown command.*cl_ragdolls",
+      "Ragdoll settings check: FAIL",
       "can't set background map while game is active",
       "Sys_Crash",
       "Assertion failed",
