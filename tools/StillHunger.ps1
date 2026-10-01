@@ -1059,6 +1059,10 @@ function Invoke-BuildSet {
     Copy-Item -LiteralPath $client -Destination (Join-Path $clientTarget 'client_amd64.dll') -Force
     Copy-Item -LiteralPath $server -Destination (Join-Path $serverTarget 'einar_amd64.dll') -Force
 
+    # Normal feature profiles disable developer mode, so raw mat_dev images
+    # are never loaded. Compile overrides for every runtime we assemble.
+    $textureConversion = Invoke-TextureConversion $Paths.runtime $StateRoot
+
     $runtimeState = Test-Runtime $Paths.runtime
     if (-not $runtimeState.valid) {
         throw "Assembled runtime is incomplete: $($runtimeState.missing -join ', ')"
@@ -1071,6 +1075,7 @@ function Invoke-BuildSet {
         audit = $audit
         development = $developmentProfile
         inheritedProfile = @($inheritedProfile)
+        textureConversion = $textureConversion
     }
 }
 
@@ -1696,6 +1701,7 @@ function Invoke-BuildFeature {
         audit = $result.audit
         development = $result.development
         inheritedProfile = @($result.inheritedProfile)
+        textureConversion = $result.textureConversion
         artifacts = @(
             foreach ($relative in @(
                 'rt_bin\xash3d.exe',
@@ -1851,7 +1857,7 @@ function New-CleanRelease {
             runtime = $paths.runtime
         }
         $build = Invoke-BuildSet $buildPaths $stateRoot
-        $textureConversion = Invoke-TextureConversion $paths.runtime $stateRoot
+        $textureConversion = $build.textureConversion
         $nodeGraphs = Update-ReleaseNodeGraphs $paths.runtime $stateRoot
         New-Item -ItemType Directory -Force -Path (Join-Path $staging 'payload') | Out-Null
         $payload = Join-Path $staging 'payload'
