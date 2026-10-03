@@ -1010,6 +1010,11 @@ function Invoke-BuildSet {
         '--config', $configuration,
         '--parallel'
     ) (Join-Path $logs 'sdk-build.log')
+    Invoke-Logged 'ctest' @(
+        '--test-dir', $sdkBuild,
+        '-C', $configuration,
+        '--output-on-failure'
+    ) (Join-Path $logs 'sdk-tests.log')
 
     $valve = Resolve-ProjectPath $script:Project.dependencies.valve.path
     Copy-ValveRuntime $valve (Join-Path $Paths.runtime 'valve')
@@ -1689,7 +1694,7 @@ function Invoke-BuildFeature {
         sdk = (Invoke-Git $paths.sdk @('rev-parse', 'HEAD'))
         rtgl1 = (Invoke-Git $paths.rtgl1 @('rev-parse', 'HEAD'))
         content = (Invoke-Git $paths.runtime @('rev-parse', 'HEAD'))
-        mainui = (Invoke-Git (Get-RepoPath 'mainui') @('rev-parse', 'HEAD'))
+        mainui = (Invoke-Git (Join-Path $paths.engine '3rdparty\mainui') @('rev-parse', 'HEAD'))
     }
     $record = [ordered]@{
         success = $true
