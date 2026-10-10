@@ -47,6 +47,7 @@ def audit(repo, ref):
     finally:
         batch.stdin.close()
         batch.wait()
+        batch.stdout.close()
     return {'repository': repo.name, 'ref': ref, 'objects': len(objects), 'blobs': blobs, 'issues': issues, 'passed': not issues}
 
 

@@ -44,11 +44,11 @@ function Invoke-PublicSources {
             continue
         }
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $repo) | Out-Null
-        Invoke-LoggedGitScript @('clone', '--no-checkout', '--single-branch', '--branch', 'master', '--no-tags', [string]$entry.url, $repo) (Join-Path $logRoot "$component-clone.log")
+        Invoke-LoggedGitScript -Arguments @('clone', '--no-checkout', '--single-branch', '--branch', 'master', '--no-tags', [string]$entry.url, $repo) -Log (Join-Path $logRoot "$component-clone.log")
         $null = Invoke-Git $repo @('checkout', '--detach', [string]$entry.revision)
     }
     Initialize-Submodules (Get-RepoPath 'engine') (Get-RepoPath 'rtgl1') $logRoot
-    Invoke-LoggedGitScript @('-C', (Get-RepoPath 'mainui'), 'submodule', 'update', '--init', '--recursive') (Join-Path $logRoot 'menu-submodules.log')
+    Invoke-LoggedGitScript -Arguments @('-C', (Get-RepoPath 'mainui'), 'submodule', 'update', '--init', '--recursive') -Log (Join-Path $logRoot 'menu-submodules.log')
     foreach ($dependency in @('fmt', 'nanorange')) {
         $repo = Resolve-ProjectPath ([string]$script:Project.build.rtgl1LocalSources.$dependency)
         $entry = $manifest.dependencies.$dependency
@@ -60,7 +60,7 @@ function Invoke-PublicSources {
         }
         else {
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $repo) | Out-Null
-            Invoke-LoggedGitScript @('clone', '--no-checkout', [string]$entry.url, $repo) (Join-Path $logRoot "$dependency-clone.log")
+            Invoke-LoggedGitScript -Arguments @('clone', '--no-checkout', [string]$entry.url, $repo) -Log (Join-Path $logRoot "$dependency-clone.log")
             $null = Invoke-Git $repo @('checkout', '--detach', [string]$entry.revision)
         }
     }
