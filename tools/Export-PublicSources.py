@@ -39,7 +39,9 @@ if __name__ == '__main__':
         revision = run('git', '-C', str(source), 'rev-parse', branch)
         run('git', 'clone', '--no-local', '--single-branch', '--no-tags', '--branch', branch, str(source), str(target))
         if component == 'sdk':
-            options = ['--force', '--invert-paths', '--prune-empty', 'never', '--prune-degenerate', 'never']
+            if not (target / '.git').is_dir() or (target / '.git').resolve() == (source / '.git').resolve():
+                raise RuntimeError('Filtering requires an isolated clone with independent Git metadata')
+            options = ['--force', '--invert-paths', '--prune-empty', 'never', '--prune-degenerate', 'never', '--preserve-commit-hashes', '--preserve-commit-encoding']
             for path in ('models/', 'sound/', 'sprites/', 'android/pak/', 'android/res/drawable/'):
                 options += ['--path', path]
             run(sys.executable, git_filter_repo.__file__, *options, cwd=target)

@@ -1,4 +1,4 @@
-# They Still Hunger development workflow
+# They Hunger Redux development workflow
 
 ## What lives where
 
@@ -8,7 +8,7 @@
 - `sdk`: client and game DLLs.
 - `rtgl1`: RayTracedGL1 renderer, generated shaders, and editor tests.
 - `mainui`: source for the engine’s pinned `menu.dll`.
-- `content`: the runtime-shaped `rt` and `StillHunger` trees. Authored binary assets use Git LFS.
+- `content`: the runtime-shaped `rt` and `HungerRedux` trees. Authored binary assets use Git LFS in the private development repository. This repository and its resources are not published on GitHub.
 
 `dependencies` holds copied, hash-protected SDL2 and stock Valve data. It is never linked into a runtime. `work` contains disposable feature worktrees, `runtime\preprod` holds the tested release candidate, and immutable release payloads live under `releases`.
 
@@ -112,8 +112,14 @@ Release manifests record all packaged hashes and the orchestration, engine, SDK,
 
 If an operation is interrupted, run `status` first. Remove a stale `.state\operation.lock` only after confirming that no `StillHunger.ps1` process is active.
 
-## Private remotes and legacy cleanup
+## Public sources and private content
 
-The imported upstream remotes are named `upstream`; `origin` is deliberately free. Add a future private host as `origin` independently in each component and in this orchestration repository.
+The imported upstream remotes are named `upstream`. Public engine, renderer, menu, and project remotes can be named `origin`. The SDK is published from a resource-filtered export: never push the raw private SDK repository or a mirror of its refs to GitHub. Keep the content repository private/local; resources belong in the ModDB release.
+
+Public contributors use `tools/StillHunger.cmd sources` and `tools/StillHunger.cmd build-code`; those commands do not require private resources. The coordinated source revisions and their development counterparts are recorded in `sources.json`. See `docs/PUBLICATION.md` for exporting source histories, retaining attribution, and updating the public manifest.
+
+Changes contributed to the filtered SDK must be ported to its private development repository deliberately, using patches where appropriate; do not assume the rewritten public and private commit IDs are interchangeable.
+
+## Legacy cleanup
 
 Migration bundles and legacy-only material are under `archives\migration-20260723`. Original repositories and installations are dated rollback sources. Delete them only after the new production release, rollback, and recovery bundles have been trusted for an agreed period.
