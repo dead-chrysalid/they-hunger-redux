@@ -213,7 +213,7 @@ function Invoke-Git {
 function Invoke-Logged {
     param(
         [Parameter(Mandatory)][string]$Executable,
-        [Parameter(Mandatory)][string[]]$Arguments,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Arguments,
         [Parameter(Mandatory)][string]$Log
     )
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Log) | Out-Null

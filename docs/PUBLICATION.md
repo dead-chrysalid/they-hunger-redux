@@ -6,11 +6,13 @@ GitHub hosts the project tools and the engine, SDK, RayTracedGL1, and menu sourc
 
 The component repositories preserve upstream and mod development history. Their upstream URLs are recorded in `sources.json`; local development repositories retain `upstream` remotes.
 
-Engine, renderer, and menu repositories retain their GitHub fork relationship. Their public default branch is `master`, which contains the integrated Redux code. Inherited upstream Actions workflows are disabled for this publication rather than being presented as verified Redux CI.
+Engine, renderer, and menu repositories retain their GitHub fork relationship. Their public default branch is `master`, which contains the integrated Redux code. Inherited upstream Actions workflows are disabled for this publication rather than being presented as verified Redux CI. The SDK additionally removes unused upstream workflow files from its latest tree while keeping their historical commits. This permits its initial upload with repository permission alone.
 
 The public SDK is a resource-filtered publication copy. Game-resource directories (`models`, `sound`, `sprites`, Android packaged assets and launcher art) are removed throughout the reachable published history. Empty commits and merge topology are retained so development context is not discarded. Rewritten commits retain their author, committer, dates, and messages. Their hashes change because their trees or ancestors changed. The private SDK repository is not rewritten.
 
 `sources.json` records both the development revision and the corresponding public revision for every component. The publisher retains the full SDK commit mapping locally under the ignored publication workspace. The public SDK is an independent repository rather than a GitHub fork containing the upstream resource-bearing branch network.
+
+Publication-only SDK metadata commits are appended to the filtered history. Subsequent exports retain the previous public branch as an ancestor. Port accepted SDK contributions into private development before exporting: the exporter uses the private development tree as the source of truth and refuses a public head that differs from the manifest.
 
 Upstream engine launcher icons and upstream renderer documentation illustrations are source-project presentation files, rather than the mod's resource collection. Bundled development libraries and shader-generation code are retained because they are needed to build the renderer.
 

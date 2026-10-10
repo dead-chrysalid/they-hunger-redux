@@ -99,7 +99,14 @@ function Invoke-PublicCodeBuild {
     foreach ($extension in @('dll', 'lib')) {
         Copy-Item -LiteralPath (Join-Path $rtglBuild "$configuration\RayTracedGL1.$extension") -Destination (Join-Path $rtglBuild "RayTracedGL1.$extension") -Force
     }
-    Invoke-Logged (Find-MSBuild) @((Join-Path $paths.engine ([string]$script:Project.build.engineSolution)), '/m:1', "/p:Configuration=$configuration", '/p:Platform=x64', "/p:RTGL1_SDK_PATH=$($paths.rtgl1)", "/p:XashRtSdl2SdkPath=$sdl2", '/p:XashRtDeployEnabled=false') (Join-Path $logs 'engine-build.log')
+    $msbuild = Find-MSBuild
+    # Build the launcher and its complete engine/menu dependency set. The
+    # solution's default Build also runs optional tests against private models.
+    Invoke-Logged $msbuild @((Join-Path $paths.engine ([string]$script:Project.build.engineSolution)), '/t:xash3d', '/m:1', "/p:Configuration=$configuration", '/p:Platform=x64', "/p:RTGL1_SDK_PATH=$($paths.rtgl1)", "/p:XashRtSdl2SdkPath=$sdl2", '/p:XashRtDeployEnabled=false') (Join-Path $logs 'engine-build.log')
+    # Compile/link the same physics test executable without invoking its
+    # AfterTargets=Build model-data hook, then run its synthetic test suite.
+    Invoke-Logged $msbuild @((Join-Path $paths.engine 'tests\ragdoll_physics_tests.vcxproj'), '/t:BuildCompile;BuildLink', '/m:1', "/p:Configuration=$configuration", '/p:Platform=x64') (Join-Path $logs 'engine-tests-build.log')
+    Invoke-Logged (Join-Path $paths.engine "tests\build\$configuration\ragdoll_physics_tests.exe") @() (Join-Path $logs 'engine-tests.log')
     $sdkBuild = Join-Path $paths.sdk ([string]$script:Project.build.sdkBuild -replace '/', '\')
     Invoke-Logged 'cmake' @('-S', $paths.sdk, '-B', $sdkBuild, '-A', 'x64', '-D64BIT=ON') (Join-Path $logs 'sdk-configure.log')
     Invoke-Logged 'cmake' @('--build', $sdkBuild, '--config', $configuration, '--parallel') (Join-Path $logs 'sdk-build.log')

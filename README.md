@@ -46,6 +46,8 @@ cd they-hunger-redux
 
 The setup command checks out the pinned source revisions and initializes their dependencies. See [Building](docs/BUILDING.md) for compiler requirements and the source-only build command.
 
+The initial publication passed a Windows x64 source build, renderer/SDK tests, and synthetic engine physics tests. See [Verification](docs/VALIDATION.md) for the tested scope.
+
 ## Licensing and history
 
 The project tools use MIT. The engine, gameplay SDK, renderer, menu, and third-party dependencies retain their own terms; see [License guide](LICENSES.md). In particular, the gameplay SDK retains Valve's Half-Life SDK license and its free-distribution restriction.

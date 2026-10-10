@@ -17,7 +17,7 @@
     },
     "sdk": {
       "url": "https://github.com/dead-chrysalid/they-hunger-redux-sdk.git",
-      "revision": "4e5788e61683d2fb79c140abe5ed630b4276d5a2",
+      "revision": "facb875afa02c4dfc0159a60d0f90c52b917727a",
       "developmentRevision": "d67b0ac9e31ff7a5f207bd459b502a7050562ed5",
       "upstream": "https://github.com/FWGS/hlsdk-portable.git",
       "history": "resource-filtered"

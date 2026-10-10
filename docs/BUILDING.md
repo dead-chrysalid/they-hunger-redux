@@ -25,7 +25,7 @@ cd they-hunger-redux
 
 `sources` clones the four public component repositories at the revisions recorded in `sources.json`. Existing repositories must be clean and at the recorded revision; the command refuses to reset your work. It initializes engine and renderer dependencies and uses the separately checked-out menu repository for the engine's menu submodule.
 
-`build-code` builds the renderer and shaders, the complete engine/menu solution, and both SDK DLLs, then runs renderer and SDK tests. It writes build output inside the component repositories and logs under `.state/publication-build`. It does not need the private content repository, assemble a playable release, or deploy into production.
+`build-code` builds the renderer and shaders, the launcher and its complete engine/menu dependency set, and both SDK DLLs. It runs the renderer and SDK tests and the engine's synthetic ragdoll physics tests. The additional engine tests that load the mod's model files remain part of the private resource-backed build workflow. Output stays inside the component repositories, with logs under `.state/publication-build`; this command does not need the content repository, assemble a playable release, or deploy into production.
 
 | Output | Location |
 | --- | --- |
