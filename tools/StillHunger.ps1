@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory = $true, Position = 0)]
     [ValidateSet(
         'new',
+        'sources',
+        'build-code',
         'status',
         'sync',
         'build',
@@ -91,6 +93,7 @@ $script:ProjectFile = Join-Path $script:ProjectRoot 'project.json'
 $script:Project = Get-Content -LiteralPath $script:ProjectFile -Raw | ConvertFrom-Json
 . (Join-Path $PSScriptRoot 'StillHunger.ContentAudit.ps1')
 . (Join-Path $PSScriptRoot 'StillHunger.Hotfix.ps1')
+. (Join-Path $PSScriptRoot 'StillHunger.Publication.ps1')
 $script:LockStream = $null
 
 function Resolve-ProjectPath {
@@ -2368,6 +2371,8 @@ function Invoke-Rollback {
 try {
     $result = switch ($Command) {
         'new' { Invoke-NewFeature }
+        'sources' { Invoke-PublicSources }
+        'build-code' { Invoke-PublicCodeBuild }
         'status' { Invoke-Status }
         'sync' { Invoke-SyncFeature }
         'build' { Invoke-BuildFeature }
