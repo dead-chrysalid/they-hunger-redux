@@ -10,29 +10,29 @@
   "components": {
     "engine": {
       "url": "https://github.com/dead-chrysalid/they-hunger-redux-engine.git",
-      "revision": "222148e021014fa5839232f8404ee95f3fa24039",
-      "developmentRevision": "222148e021014fa5839232f8404ee95f3fa24039",
+      "revision": "6ea014fc2159de07dccdb753a31d741500dc831a",
+      "developmentRevision": "6ea014fc2159de07dccdb753a31d741500dc831a",
       "upstream": "https://github.com/sultim-t/xash-rt.git",
       "history": "preserved"
     },
     "sdk": {
       "url": "https://github.com/dead-chrysalid/they-hunger-redux-sdk.git",
-      "revision": "facb875afa02c4dfc0159a60d0f90c52b917727a",
-      "developmentRevision": "d67b0ac9e31ff7a5f207bd459b502a7050562ed5",
+      "revision": "f129bbf0d9e08c68af4bdec771111a13d4be921c",
+      "developmentRevision": "93ecec26c278167f7cab799dcabb291732d8e322",
       "upstream": "https://github.com/FWGS/hlsdk-portable.git",
       "history": "resource-filtered"
     },
     "rtgl1": {
       "url": "https://github.com/dead-chrysalid/they-hunger-redux-renderer.git",
-      "revision": "f8469e026fb97c94ff8f46d79ee969600e525c4f",
-      "developmentRevision": "f8469e026fb97c94ff8f46d79ee969600e525c4f",
+      "revision": "5a7d1fc872672c972692a5736b57bf8081bf7c27",
+      "developmentRevision": "5a7d1fc872672c972692a5736b57bf8081bf7c27",
       "upstream": "https://github.com/sultim-t/RayTracedGL1.git",
       "history": "preserved"
     },
     "mainui": {
       "url": "https://github.com/dead-chrysalid/they-hunger-redux-menu.git",
-      "revision": "d23e8295b84e9342a0ea999a7e0b61096d81eca1",
-      "developmentRevision": "d23e8295b84e9342a0ea999a7e0b61096d81eca1",
+      "revision": "bb28aa6e9cef0914817df6ab1f21abdacd4f16fa",
+      "developmentRevision": "bb28aa6e9cef0914817df6ab1f21abdacd4f16fa",
       "upstream": "https://github.com/sultim-t/xash-rt-menu.git",
       "history": "preserved"
     }
