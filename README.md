@@ -17,6 +17,8 @@ cd they-hunger-redux
 
 Maps, models, textures, and sounds are distributed separately. **ModDB download: forthcoming.**
 
+To assemble and run the build with an existing mod installation, see [Run](docs/BUILDING.md#run).
+
 ## Credits
 
 They Hunger's original team, Valve, the Xash3D/FWGS contributors, Sultim Tsyrendashiev, and the They Hunger Redux contributors. See [credits](CREDITS.md) and [component licenses](LICENSES.md).

@@ -71,6 +71,8 @@ function Invoke-PublicSources {
 function Invoke-PublicCodeBuild {
     Enter-ProjectLock
     $null = Assert-PublicSourceRevisions
+    $receipt = Join-Path $script:ProjectRoot '.state\publication-build\build.json'
+    if (Test-Path -LiteralPath $receipt) { Remove-Item -LiteralPath $receipt }
     $paths = [ordered]@{ engine = Get-RepoPath 'engine'; sdk = Get-RepoPath 'sdk'; rtgl1 = Get-RepoPath 'rtgl1' }
     $logs = Join-Path $script:ProjectRoot '.state\publication-build'
     New-Item -ItemType Directory -Force -Path $logs | Out-Null
@@ -118,5 +120,126 @@ function Invoke-PublicCodeBuild {
     foreach ($artifact in @("cl_dll\$configuration\client_amd64.dll", "dlls\$configuration\einar_amd64.dll")) {
         if (-not (Test-Path -LiteralPath (Join-Path $sdkBuild $artifact))) { throw "Missing SDK build artifact: $artifact" }
     }
-    return [ordered]@{ api = $api; logs = $logs; engine = $engineOutput; renderer = $rtglBuild; sdk = $sdkBuild; runtimeAssembled = $false }
+    $payload = @(Get-PublicBuildPayload)
+    Write-JsonAtomic $receipt ([ordered]@{
+        sources = (Get-PublicSourceManifest).components
+        files = @($payload | ForEach-Object { [ordered]@{ path = $_.relative; sha256 = Get-FileSha256 $_.source } })
+    })
+    return [ordered]@{ api = $api; logs = $logs; engine = $engineOutput; renderer = $rtglBuild; sdk = $sdkBuild; runtimeAssembled = $false; next = 'assemble -Resources <mod-installation>' }
+}
+
+function Get-PublicBuildPayload {
+    $configuration = [string]$script:Project.build.configuration
+    $engine = Join-Path (Get-RepoPath 'engine') ([string]$script:Project.build.engineOutput)
+    $renderer = Join-Path (Get-RepoPath 'rtgl1') ([string]$script:Project.build.rtgl1Build)
+    $sdk = Join-Path (Get-RepoPath 'sdk') ([string]$script:Project.build.sdkBuild)
+    $sdl = Resolve-ProjectPath ([string]$script:Project.dependencies.sdl2.path)
+    foreach ($file in @('xash3d.exe', 'xash.dll', 'filesystem_stdio.dll', 'ref_gl.dll', 'menu.dll')) {
+        [pscustomobject]@{ source = Join-Path $engine $file; relative = "rt_bin/$file" }
+    }
+    [pscustomobject]@{ source = Join-Path $renderer 'RayTracedGL1.dll'; relative = 'rt_bin/RayTracedGL1.dll' }
+    [pscustomobject]@{ source = Join-Path $sdl 'lib/x64/SDL2.dll'; relative = 'rt_bin/SDL2.dll' }
+    [pscustomobject]@{ source = Join-Path $sdk "cl_dll/$configuration/client_amd64.dll"; relative = "$($script:Project.gameToken)/cl_dlls/client_amd64.dll" }
+    [pscustomobject]@{ source = Join-Path $sdk "dlls/$configuration/einar_amd64.dll"; relative = "$($script:Project.gameToken)/dlls/einar_amd64.dll" }
+    $shaders = @(Get-ChildItem -LiteralPath (Join-Path $renderer 'shaders') -Filter '*.spv' -File)
+    if ($shaders.Count -eq 0) { throw 'Compiled shaders are missing. Run build-code first.' }
+    foreach ($file in $shaders) {
+        [pscustomobject]@{ source = $file.FullName; relative = "rt/shaders/$($file.Name)" }
+    }
+}
+
+function Get-PublicRuntimePath {
+    param([string]$Output)
+    $work = Resolve-ProjectPath ([string]$script:Project.paths.work)
+    if ([string]::IsNullOrWhiteSpace($Output)) { $Output = Join-Path $work 'play' }
+    if (-not [IO.Path]::IsPathRooted($Output)) { $Output = Join-Path $script:ProjectRoot $Output }
+    $resolved = [IO.Path]::GetFullPath($Output).TrimEnd('\', '/')
+    if (-not $resolved.StartsWith($work.TrimEnd('\', '/') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Assembly output must be a new directory inside the project work folder.'
+    }
+    # Reject junctions/symlinks in the destination's ancestors, including work.
+    $ancestor = $resolved
+    while ($ancestor -and $ancestor -ne $script:ProjectRoot) {
+        if (Test-Path -LiteralPath $ancestor) {
+            if ((Get-Item -LiteralPath $ancestor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "Assembly output uses a junction or symbolic link: $ancestor"
+            }
+        }
+        $ancestor = Split-Path -Parent $ancestor
+    }
+    return $resolved
+}
+
+function Invoke-PublicAssemble {
+    param([string]$Resources, [string]$Output)
+    Enter-ProjectLock
+    $destination = Get-PublicRuntimePath $Output
+    if (Test-Path -LiteralPath $destination) { throw 'Output already exists. Choose a new -Output directory.' }
+    if ([string]::IsNullOrWhiteSpace($Resources)) { throw 'Specify -Resources with an extracted ModDB release or existing mod installation.' }
+    $resourcesRoot = (Resolve-Path -LiteralPath $Resources -ErrorAction Stop).ProviderPath.TrimEnd('\', '/')
+    foreach ($pair in @(@($destination, $resourcesRoot), @($resourcesRoot, $destination))) {
+        if ($pair[0].Equals($pair[1], [StringComparison]::OrdinalIgnoreCase) -or
+            $pair[0].StartsWith($pair[1] + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Resource and output directories must be separate and must not contain each other.'
+        }
+    }
+    $game = [string]$script:Project.gameToken
+    foreach ($relative in @("$game/gameinfo.txt", "$game/maps", "$game/models", 'valve/gameinfo.txt', 'rt/data/scenes.json', 'rt/data/textures.json')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $resourcesRoot $relative))) { throw "Missing mod resources: $relative" }
+    }
+    $manifest = Assert-PublicSourceRevisions
+    $receiptFile = Join-Path $script:ProjectRoot '.state/publication-build/build.json'
+    if (-not (Test-Path -LiteralPath $receiptFile)) { throw 'No successful build recorded. Run build-code first.' }
+    $receipt = Get-Content -LiteralPath $receiptFile -Raw | ConvertFrom-Json
+    foreach ($component in @('engine', 'sdk', 'rtgl1', 'mainui')) {
+        if ($receipt.sources.$component.revision -ne $manifest.components.$component.revision) { throw 'Source revisions changed since the build. Run build-code again.' }
+    }
+    $payload = @(Get-PublicBuildPayload)
+    if ($receipt.files.Count -ne $payload.Count) { throw 'Build output changed. Run build-code again.' }
+    foreach ($file in $payload) {
+        $record = @($receipt.files | Where-Object { $_.path -eq $file.relative })
+        if ($record.Count -ne 1 -or -not (Test-Path -LiteralPath $file.source -PathType Leaf) -or
+            (Get-FileSha256 $file.source) -ne $record[0].sha256) { throw "Build output changed: $($file.relative). Run build-code again." }
+    }
+    # Enumerate before creating output and refuse links rather than following them.
+    $queue = [Collections.Generic.Queue[string]]::new()
+    $queue.Enqueue($resourcesRoot)
+    $resourceFiles = [Collections.Generic.List[object]]::new()
+    while ($queue.Count -gt 0) {
+        $directory = $queue.Dequeue()
+        if ((Get-Item -LiteralPath $directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Resources contain a junction or symbolic link: $directory" }
+        foreach ($item in Get-ChildItem -LiteralPath $directory -Force) {
+            $relative = $item.FullName.Substring($resourcesRoot.Length + 1).Replace('\', '/')
+            if ((Test-Excluded $relative) -or $relative -eq 'rt/shaders' -or $relative -like 'rt/shaders/*' -or
+                $relative -eq 'StartGame.cmd' -or $relative -eq 'source-build.json') { continue }
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Resources contain a junction or symbolic link: $relative" }
+            if ($item.PSIsContainer) { $queue.Enqueue($item.FullName) }
+            else { $resourceFiles.Add([pscustomobject]@{ source = $item.FullName; relative = $relative }) }
+        }
+    }
+    $work = Resolve-ProjectPath ([string]$script:Project.paths.work)
+    $staging = Get-PublicRuntimePath (Join-Path $work ('.assembling-' + [Guid]::NewGuid().ToString('N')))
+    try {
+        New-Item -ItemType Directory -Path $staging | Out-Null
+        foreach ($file in @($resourceFiles.ToArray()) + $payload) {
+            $target = Join-Path $staging $file.relative
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+            Copy-Item -LiteralPath $file.source -Destination $target -Force
+        }
+        $launcher = "@echo off`r`ncd /d `"%~dp0`"`r`n`"rt_bin\xash3d.exe`" -game $game %*`r`n"
+        [IO.File]::WriteAllText((Join-Path $staging 'StartGame.cmd'), $launcher, [Text.Encoding]::ASCII)
+        Copy-Item -LiteralPath $receiptFile -Destination (Join-Path $staging 'source-build.json')
+        $state = Test-Runtime $staging
+        if (-not $state.valid) { throw "Assembled runtime is incomplete: $($state.missing -join ', ')" }
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+        $null = Get-PublicRuntimePath $destination
+        [IO.Directory]::Move($staging, $destination)
+    }
+    finally {
+        if (Test-Path -LiteralPath $staging) {
+            $checked = Get-PublicRuntimePath $staging
+            Remove-Item -LiteralPath $checked -Recurse -Force
+        }
+    }
+    return [ordered]@{ runtime = $destination; launcher = Join-Path $destination 'StartGame.cmd'; copiedResources = $resourceFiles.Count; buildFiles = $payload.Count }
 }

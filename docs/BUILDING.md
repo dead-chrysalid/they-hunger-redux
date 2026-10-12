@@ -29,3 +29,14 @@ cd they-hunger-redux
 | Server DLL | `repos/sdk/build/dlls/Release/` |
 
 Build logs are in `.state/publication-build`. To play, use the matching ModDB release's resources; they are not included in the source repositories.
+
+## Run
+
+Assemble the build with an extracted mod release or existing installation:
+
+```powershell
+.\tools\StillHunger.cmd assemble -Resources "D:\Games\They Hunger Redux"
+.\work\play\StartGame.cmd
+```
+
+This creates `work/play` with the resources, matching binaries, and compiled shaders. The resource installation stays untouched. Use `-Output work/play-2` to create another copy; existing output folders are never overwritten.

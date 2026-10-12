@@ -5,6 +5,8 @@ param(
         'new',
         'sources',
         'build-code',
+        'assemble',
+        'smoke-assembled',
         'status',
         'sync',
         'build',
@@ -26,6 +28,8 @@ param(
     [string]$Name,
     [string]$Release,
     [string]$SettingsFile,
+    [string]$Resources,
+    [string]$Output,
     [switch]$Screenshots
 )
 
@@ -1237,7 +1241,7 @@ function Invoke-Smoke {
     if (-not $state.valid) { throw "Runtime is incomplete: $($state.missing -join ', ')" }
     $contentAudit = $null
     if (-not $SkipAudit) {
-        $contentAudit = if ($Kind -in @('preprod', 'production')) {
+        $contentAudit = if ($Kind -in @('preprod', 'production', 'assembled')) {
             Test-StillHungerContent $Runtime $script:Project -Payload -AllowGenerated
         }
         else {
@@ -2373,6 +2377,12 @@ try {
         'new' { Invoke-NewFeature }
         'sources' { Invoke-PublicSources }
         'build-code' { Invoke-PublicCodeBuild }
+        'assemble' { Invoke-PublicAssemble -Resources $Resources -Output $Output }
+        'smoke-assembled' {
+            Enter-ProjectLock
+            $runtime = Get-PublicRuntimePath $Output
+            Invoke-Smoke $runtime (Join-Path $script:ProjectRoot '.state\assembled-smoke') 'assembled'
+        }
         'status' { Invoke-Status }
         'sync' { Invoke-SyncFeature }
         'build' { Invoke-BuildFeature }
