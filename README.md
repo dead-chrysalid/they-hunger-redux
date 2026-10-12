@@ -1,55 +1,22 @@
-<div align="center">
-
 # They Hunger Redux
 
-**A ray-traced return to They Hunger.**
+A ray-traced version of the Half-Life mod They Hunger, built on Sultim's Xash RT engine and RayTracedGL1.
 
-[![Platform](https://img.shields.io/badge/platform-Windows_x64-30363d)](docs/BUILDING.md)
-[![Renderer](https://img.shields.io/badge/renderer-RayTracedGL1-8f302d)](https://github.com/dead-chrysalid/they-hunger-redux-renderer)
-[![Source](https://img.shields.io/badge/source-component_licenses-30363d)](LICENSES.md)
+This repository contains the build tools. The code lives in the [engine](https://github.com/dead-chrysalid/they-hunger-redux-engine), [gameplay SDK](https://github.com/dead-chrysalid/they-hunger-redux-sdk), [renderer](https://github.com/dead-chrysalid/they-hunger-redux-renderer), and [menu](https://github.com/dead-chrysalid/they-hunger-redux-menu) repositories.
 
-[Build from source](docs/BUILDING.md) · [Project components](#source-repositories) · [Credits](CREDITS.md) · [Contribute](CONTRIBUTING.md)
+## Build
 
-</div>
-
-They Hunger Redux brings the They Hunger campaign to a customized Sultim Xash RT engine, with RayTracedGL1 rendering and a dedicated gameplay SDK and menu. This repository is the entry point for the source code and the tools that build the components together.
-
-The project combines work from the original They Hunger creators, Valve, the Xash3D/FWGS community, Sultim Tsyrendashiev, and this mod's contributors. Each component preserves its development history and original licensing.
-
-## Play
-
-**ModDB release: forthcoming.** The download link will be added here when the mod page is published.
-
-The playable mod and its resource files will be distributed through ModDB. Maps, models, textures, sounds, and the private content repository are not published on GitHub. A source checkout does not include a playable installation.
-
-## Source repositories
-
-| Component | Repository | Role |
-| --- | --- | --- |
-| Project | **they-hunger-redux** | Setup, source revisions, build tools, and project documentation |
-| Engine | [they-hunger-redux-engine](https://github.com/dead-chrysalid/they-hunger-redux-engine) | Xash RT engine, `ref_gl` integration, and engine systems |
-| Gameplay | [they-hunger-redux-sdk](https://github.com/dead-chrysalid/they-hunger-redux-sdk) | They Hunger client/server code, gameplay, and HUD |
-| Renderer | [they-hunger-redux-renderer](https://github.com/dead-chrysalid/they-hunger-redux-renderer) | RayTracedGL1, shaders, and renderer/editor code |
-| Menu | [they-hunger-redux-menu](https://github.com/dead-chrysalid/they-hunger-redux-menu) | Menu and mod settings |
-
-[sources.json](sources.json) records the exact public revisions that belong together. The engine and SDK use client API **10**; the engine and renderer use renderer API **4**.
-
-## Get the code
-
-On Windows, with Git for Windows installed:
+Windows x64. Install the prerequisites in the [build guide](docs/BUILDING.md), then run:
 
 ```powershell
 git clone https://github.com/dead-chrysalid/they-hunger-redux.git
 cd they-hunger-redux
 .\tools\StillHunger.cmd sources
+.\tools\StillHunger.cmd build-code
 ```
 
-The setup command checks out the pinned source revisions and initializes their dependencies. See [Building](docs/BUILDING.md) for compiler requirements and the source-only build command.
+Maps, models, textures, and sounds are distributed separately. **ModDB download: forthcoming.**
 
-The initial publication passed a Windows x64 source build, renderer/SDK tests, and synthetic engine physics tests. See [Verification](docs/VALIDATION.md) for the tested scope.
+## Credits
 
-## Licensing and history
-
-The project tools use MIT. The engine, gameplay SDK, renderer, menu, and third-party dependencies retain their own terms; see [License guide](LICENSES.md). In particular, the gameplay SDK retains Valve's Half-Life SDK license and its free-distribution restriction.
-
-The SDK publication history omits game resources throughout its history. Commit authors, messages, and development topology are retained, but affected commit IDs differ from the private development repository. See [Publication](docs/PUBLICATION.md) for the policy and revision mapping.
+They Hunger's original team, Valve, the Xash3D/FWGS contributors, Sultim Tsyrendashiev, and the They Hunger Redux contributors. See [credits](CREDITS.md) and [component licenses](LICENSES.md).

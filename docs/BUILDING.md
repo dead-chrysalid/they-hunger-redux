@@ -1,42 +1,31 @@
-# Building on Windows
-
-The coordinated target is **Windows x64, Release**, using Sultim's `ref_gl` and RayTracedGL1.
+# Build on Windows
 
 ## Requirements
 
-- Git for Windows, including its Bash and Unix helpers.
-- Visual Studio 2022 or Build Tools 2022, with Desktop development with C++, the v143 toolchain, and a Windows SDK.
-- CMake and CTest available in your shell.
-- Python 3 for shader generation.
-- Vulkan SDK, with `VULKAN_SDK` set and its shader compiler available.
-- SDL2 development package **2.0.14** for Visual C++, extracted to the `project.json` SDL2 dependency path (`dependencies/SDL2_VC`). Obtain it from the [official SDL release archive](https://www.libsdl.org/release/SDL2-devel-2.0.14-VC.zip). The directory must contain `include/SDL.h` and `lib/x64/SDL2.dll`.
+- Git for Windows.
+- Visual Studio 2022 or Build Tools 2022 with Desktop development with C++, v143, and a Windows SDK.
+- CMake, CTest, and Python 3 available in your shell.
+- Vulkan SDK, with `VULKAN_SDK` set.
+- [SDL2 2.0.14 development package for Visual C++](https://www.libsdl.org/release/SDL2-devel-2.0.14-VC.zip). Extract its contents into `dependencies/SDL2_VC`, so that `include/SDL.h` and `lib/x64/SDL2.dll` exist there.
 
-The build uses bundled FSR2 support. NVIDIA DLSS support is optional and requires the NVIDIA SDK if enabled; the documented command disables it to avoid requiring a separate proprietary SDK.
-
-## Checkout and build
+## Build
 
 ```powershell
 git clone https://github.com/dead-chrysalid/they-hunger-redux.git
 cd they-hunger-redux
 .\tools\StillHunger.cmd sources
-# Install the prerequisites and extract the SDL2 development package first.
+# Extract SDL2 into dependencies/SDL2_VC before building.
 .\tools\StillHunger.cmd build-code
 ```
 
-`sources` clones the four public component repositories at the revisions recorded in `sources.json`. Existing repositories must be clean and at the recorded revision; the command refuses to reset your work. It initializes engine and renderer dependencies and uses the separately checked-out menu repository for the engine's menu submodule.
+`sources` downloads the matching component revisions and dependencies. `build-code` builds Windows x64 Release binaries, compiles shaders, and runs tests. DLSS is disabled; FSR2 is included.
 
-`build-code` builds the renderer and shaders, the launcher and its complete engine/menu dependency set, and both SDK DLLs. It runs the renderer and SDK tests and the engine's synthetic ragdoll physics tests. The additional engine tests that load the mod's model files remain part of the private resource-backed build workflow. Output stays inside the component repositories, with logs under `.state/publication-build`; this command does not need the content repository, assemble a playable release, or deploy into production.
-
-| Output | Location |
+| Output | Directory |
 | --- | --- |
-| Engine, launcher, filesystem, `ref_gl`, and menu | `repos/engine/x64/Release/` |
-| RayTracedGL1 DLL and import library | `repos/rtgl1/Build/x64-Release/` |
-| Compiled renderer shaders | `repos/rtgl1/Build/x64-Release/shaders/` |
-| Client DLL | `repos/sdk/build/cl_dll/Release/client_amd64.dll` |
-| Server DLL | `repos/sdk/build/dlls/Release/einar_amd64.dll` |
+| Launcher, engine, filesystem, renderer bridge, menu | `repos/engine/x64/Release/` |
+| RayTracedGL1 DLL and library | `repos/rtgl1/Build/x64-Release/` |
+| Renderer shaders | `repos/rtgl1/Build/x64-Release/shaders/` |
+| Client DLL | `repos/sdk/build/cl_dll/Release/` |
+| Server DLL | `repos/sdk/build/dlls/Release/` |
 
-Use the matching ModDB release's resources for runtime testing. A valid playable engine installation needs its complete paired engine, menu, renderer, and SDL2 set; a valid SDK installation needs both game DLLs. Avoid mixing arbitrary component versions.
-
-## Maintainer workflow
-
-`project.json` remains the path and interface authority. The other unified commands described in `WORKFLOW.md` require the private content repository and local dependencies. Keep production staging and promotion in that workflow. Run unified commands through `tools/StillHunger.cmd` so the Windows environment bootstrap is applied.
+Build logs are in `.state/publication-build`. To play, use the matching ModDB release's resources; they are not included in the source repositories.
